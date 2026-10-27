@@ -303,7 +303,7 @@
     <string name="settings_lyrics_no_animation">Remover animações</string>
     <string name="settings_lyrics_no_animation_summary">Remover todas animações de transição de letras</string>
     <string name="bitrate_format">%1$d kbps</string>
-    <string name="app_name">Gramophone</string>
+    <string name="app_name">Squishy Roots</string>
     <plurals name="folders_plural">
         <item quantity="one">%d Pasta</item>
         <item quantity="many">%d Pastas</item>

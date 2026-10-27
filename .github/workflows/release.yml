@@ -1,0 +1,53 @@
+name: Release
+
+# Manuell auslösen (GitHub-Weboberfläche, App oder `gh workflow run release.yml`).
+# Baut eine signierte APK und veröffentlicht sie als GitHub-Release für Obtainium.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Create signing files
+        run: |
+          mkdir -p ~/.gradle
+          echo "${{ secrets.KEYSTORE_SECRET }}" | base64 -d > ~/key.jks
+          echo "AKANE_RELEASE_STORE_FILE=$(realpath ~/key.jks)" > ~/.gradle/gradle.properties
+          echo "AKANE_RELEASE_STORE_PASSWORD=${{ secrets.KEYSTORE_PWD }}" >> ~/.gradle/gradle.properties
+          echo "AKANE_RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> ~/.gradle/gradle.properties
+          echo "AKANE_RELEASE_KEY_PASSWORD=${{ secrets.KEY_PWD }}" >> ~/.gradle/gradle.properties
+
+      - name: Build
+        run: |
+          echo releaseType=Release > package.properties
+          ./gradlew :app:assembleRelease \
+            -PsquishyVersionCode=${{ github.run_number }} \
+            -PversionNameSuffixOverride=-sr.${{ github.run_number }}
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          TAG=sr.${{ github.run_number }}
+          cp "$APK" "squishy-roots-$TAG.apk"
+          gh release create "$TAG" "squishy-roots-$TAG.apk" \
+            --target "$GITHUB_SHA" --title "Squishy Roots $TAG" \
+            --notes "$(git log -1 --format=%s)"
