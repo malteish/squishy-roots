@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/squishy_passt_nicht" android:title="@string/squishy_passt_nicht" />
+    <item android:id="@+id/squishy_mag_nicht" android:title="@string/squishy_mag_nicht" />
+    <item android:id="@+id/squishy_falsche_version" android:title="@string/squishy_falsche_version" />
+    <item android:id="@+id/squishy_defekt" android:title="@string/squishy_defekt" />
+    <item android:id="@+id/squishy_spaeter" android:title="@string/squishy_spaeter" />
+    <item android:id="@+id/squishy_notiz" android:title="@string/squishy_notiz_menu" />
+    <item android:id="@+id/squishy_einrichten" android:title="@string/squishy_einrichten" />
+</menu>

@@ -304,6 +304,7 @@ fun MediaController.setTimer(value: Int, waitUntilSongEnd: Boolean) {
 }
 
 fun MediaController.setMediaItemsSeamlessly(items: List<MediaItem>, position: Int, title: String) {
+    com.malteish.squishyroots.Feedback.rememberQueue(title)
     sendCustomCommand(
         SessionCommand(SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY, Bundle.EMPTY).apply {
             customExtras.putBinder("items", MediaItemList(items))
@@ -315,6 +316,7 @@ fun MediaController.setMediaItemsSeamlessly(items: List<MediaItem>, position: In
 
 fun MediaController.setMediaItemsWithTitle(items: List<MediaItem>, position: Int = C.INDEX_UNSET, title: String,
                                         shuffleEnabled: Boolean? = null, repeatMode: @Player.RepeatMode Int? = null) {
+    com.malteish.squishyroots.Feedback.rememberQueue(title)
     sendCustomCommand(
         SessionCommand(SERVICE_SET_MEDIA_ITEMS_ATOMIC, Bundle.EMPTY).apply {
             customExtras.putBinder("items", MediaItemList(items))

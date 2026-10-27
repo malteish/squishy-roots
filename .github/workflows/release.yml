@@ -2,9 +2,14 @@ name: Release
 
 # Manuell auslösen (GitHub-Weboberfläche, App oder `gh workflow run release.yml`).
 # Baut eine signierte APK und veröffentlicht sie als GitHub-Release für Obtainium.
+# Versionscode = Major·1000000 + Minor·1000 + Patch (sr.1 hatte Code 1).
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version nach SemVer, z. B. 0.2.0'
+        required: true
 
 permissions:
   contents: write
@@ -34,19 +39,28 @@ jobs:
           echo "AKANE_RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> ~/.gradle/gradle.properties
           echo "AKANE_RELEASE_KEY_PASSWORD=${{ secrets.KEY_PWD }}" >> ~/.gradle/gradle.properties
 
+      - name: Check version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "Keine SemVer-Version: $VERSION"; exit 1; }
+          M=${BASH_REMATCH[1]} N=${BASH_REMATCH[2]} P=${BASH_REMATCH[3]}
+          (( N < 1000 && P < 1000 )) || { echo "Minor und Patch müssen unter 1000 liegen"; exit 1; }
+          echo "VERSION_CODE=$(( M * 1000000 + N * 1000 + P ))" >> "$GITHUB_ENV"
+
       - name: Build
         run: |
           echo releaseType=Release > package.properties
           ./gradlew :app:assembleRelease \
-            -PsquishyVersionCode=${{ github.run_number }} \
-            -PversionNameSuffixOverride=-sr.${{ github.run_number }}
+            -PsquishyVersionCode=$VERSION_CODE \
+            -PsquishyVersionName=${{ inputs.version }}
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
-          TAG=sr.${{ github.run_number }}
+          TAG=v${{ inputs.version }}
           cp "$APK" "squishy-roots-$TAG.apk"
           gh release create "$TAG" "squishy-roots-$TAG.apk" \
             --target "$GITHUB_SHA" --title "Squishy Roots $TAG" \

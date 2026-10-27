@@ -164,6 +164,7 @@ class MainActivity : BaseActivity() {
         installSplashScreen().setKeepOnScreenCondition { !ready }
         super.onCreate(savedInstanceState)
         lifecycle.addObserver(controllerViewModel)
+        com.malteish.squishyroots.Feedback.register(this)
         enableEdgeToEdgeProperly()
         if (savedInstanceState?.containsKey("AddToPlaylistPendingRequest") == true) {
             pendingPlaylistRequest = savedInstanceState.getBundle("AddToPlaylistPendingRequest")

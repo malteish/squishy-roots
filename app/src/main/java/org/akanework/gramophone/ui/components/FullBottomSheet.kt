@@ -78,6 +78,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.Log
 import androidx.media3.session.MediaBrowser
+import com.malteish.squishyroots.Feedback
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import androidx.preference.PreferenceManager
@@ -264,6 +265,8 @@ class FullBottomSheet
     private val bottomSheetTimerButton: MaterialButton
     private val bottomSheetPlaybackSpeedButton: MaterialButton
     private val bottomSheetFavoriteButton: MaterialButton
+    private val squishyThumbUp: MaterialButton
+    private val squishyThumbDown: MaterialButton
     val bottomSheetLyricButton: MaterialButton
     private val bottomSheetFullSeekBar: SeekBar
     private val bottomSheetFullSlider: Slider
@@ -291,6 +294,8 @@ class FullBottomSheet
         bottomSheetTimerButton = findViewById(R.id.timer)
         bottomSheetPlaybackSpeedButton = findViewById(R.id.playback_speed)
         bottomSheetFavoriteButton = findViewById(R.id.favor)
+        squishyThumbUp = findViewById(R.id.squishy_thumb_up)
+        squishyThumbDown = findViewById(R.id.squishy_thumb_down)
         bottomSheetPlaylistButton = findViewById(R.id.playlist)
         bottomSheetLyricButton = findViewById(R.id.lyrics)
         bottomSheetFullQualityDetails = findViewById(R.id.quality_details)
@@ -495,6 +500,18 @@ class FullBottomSheet
         }
 
         bottomSheetFavoriteButton.addOnCheckedChangeListener(this)
+
+        for ((button, urteil) in listOf(squishyThumbUp to Feedback.JA, squishyThumbDown to Feedback.NEIN)) {
+            button.setOnClickListener {
+                ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.CONTEXT_CLICK)
+                Feedback.onThumb(activity, instance?.currentMediaItem, urteil) { updateThumbs() }
+            }
+            button.setOnLongClickListener {
+                ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.LONG_PRESS)
+                Feedback.showMenu(activity, it, instance?.currentMediaItem) { updateThumbs() }
+                true
+            }
+        }
 
         bottomSheetPlaylistButton.setOnClickListener {
             ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.CONTEXT_CLICK)
@@ -1451,7 +1468,16 @@ class FullBottomSheet
         }
     }
 
+    private fun updateThumbs() {
+        val urteil = Feedback.currentVerdict(instance?.currentMediaItem)
+        squishyThumbUp.setIconResource(if (urteil == Feedback.JA)
+            R.drawable.ic_squishy_thumb_up_filled else R.drawable.ic_squishy_thumb_up)
+        squishyThumbDown.setIconResource(if (urteil == Feedback.NEIN)
+            R.drawable.ic_squishy_thumb_down_filled else R.drawable.ic_squishy_thumb_down)
+    }
+
     override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
+        updateThumbs()
         val isHeart = (mediaMetadata.userRating as? HeartRating)?.isHeart == true
         if (bottomSheetFavoriteButton.isChecked != isHeart) {
             bottomSheetFavoriteButton.removeOnCheckedChangeListener(this)

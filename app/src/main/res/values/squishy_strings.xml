@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Squishy Roots: Feedback. Bewusst nur auf Deutsch. -->
+<resources>
+    <string name="squishy_ja">Passt hierher</string>
+    <string name="squishy_passt_nicht">Passt nicht hierher</string>
+    <string name="squishy_mag_nicht">Mag ich gar nicht</string>
+    <string name="squishy_falsche_version">Falsche Version</string>
+    <string name="squishy_defekt">Defekt</string>
+    <string name="squishy_spaeter">Später</string>
+    <string name="squishy_notiz">Notiz</string>
+    <string name="squishy_notiz_menu">Notiz …</string>
+    <string name="squishy_einrichten">Person und Ordner ändern …</string>
+    <string name="squishy_zurueckgenommen">Zurückgenommen</string>
+    <string name="squishy_person">Wer hört? (z. B. malte)</string>
+    <string name="squishy_ordner">Ordner für Feedback</string>
+    <string name="squishy_ordner_hinweis">Bitte den Musikordner wählen, den Syncthing synchronisiert. Das Feedback landet dort unter feedback/.</string>
+    <string name="squishy_gespeichert">%1$s · %2$s</string>
+    <string name="squishy_ohne_playlist">ohne Playlist</string>
+    <string name="squishy_fehler">Feedback nicht gespeichert: %1$s</string>
+    <string name="squishy_daumen_hoch">Daumen hoch (lang drücken: mehr)</string>
+    <string name="squishy_daumen_runter">Daumen runter (lang drücken: mehr)</string>
+</resources>
