@@ -26,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.preference.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -44,9 +45,10 @@ import java.time.format.DateTimeFormatter
  * Schreibt jeden Knopfdruck als eine JSON-Zeile an `feedback/<person>.jsonl` im freigegebenen
  * Ordner (die per Syncthing synchronisierte Selektion). Die Datei wird nur angehängt.
  *
- * Kontext eines Ereignisses: Playlist-Name und -Beschreibung (aus der Kopfzeile `#DESCRIPTION:`
- * der M3U), Person und Zeit. Die Playlist ist die Warteschlange, aus der zuletzt gestartet wurde,
- * und zählt nur, wenn der laufende Titel in ihr steht.
+ * Kontext eines Ereignisses: Situation (Playlist-Name), Beschreibung (aus der Kopfzeile
+ * `#DESCRIPTION:` der M3U), Person und Zeit. Eine Liste `<name>-kandidaten` gehört zur Situation
+ * `<name>`. Im Player ist die Liste die Warteschlange, aus der zuletzt gestartet wurde, beim
+ * Wischen die angezeigte Playlist. Sie zählt nur, wenn der Titel in ihr steht.
  */
 object Feedback {
     const val JA = "ja"
@@ -57,6 +59,10 @@ object Feedback {
     private const val KEY_TREE = "squishy_tree"
     private const val KEY_QUEUE = "squishy_queue"
     private const val DESCRIPTION_PREFIX = "#DESCRIPTION:"
+    const val CANDIDATE_SUFFIX = "-kandidaten"
+
+    /** Situation einer Liste: `x-kandidaten` gehört zu `x`. */
+    fun situationOf(listTitle: String?): String? = listTitle?.removeSuffix(CANDIDATE_SUFFIX)
 
     private var prefs: SharedPreferences? = null
     private var queueTitle: String? = null
@@ -79,6 +85,12 @@ object Feedback {
         }
     }
 
+    /** Die schon geladenen Standard-Einstellungen (kein erneuter Plattenzugriff). */
+    fun preferences(context: Context): SharedPreferences {
+        init(context)
+        return prefs!!
+    }
+
     private fun init(context: Context) {
         if (prefs == null) {
             prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
@@ -92,25 +104,36 @@ object Feedback {
         prefs?.edit { putString(KEY_QUEUE, title) }
     }
 
-    /** Letztes Urteil zu diesem Titel in der aktuellen Warteschlange (für die Anzeige). */
-    fun currentVerdict(item: MediaItem?): String? {
-        val key = verdictKey(item) ?: return null
-        return prefs?.getString(key, null)
-    }
+    /** Letztes Urteil zu diesem Titel in der aktuellen Warteschlange (für den Player). */
+    fun currentVerdict(item: MediaItem?): String? =
+        if (item == null) null else verdict(situationOf(queueTitle), item.mediaId)
 
-    private fun verdictKey(item: MediaItem?): String? {
-        if (item == null) return null
-        return "squishy_v:" + (queueTitle ?: "") + "|" + item.mediaId
-    }
+    /** Letztes Urteil zu einem Titel in einer Situation (für die Markierung in Listen). */
+    fun verdict(situation: String?, mediaId: String): String? =
+        prefs?.getString(verdictKey(situation, mediaId), null)
+
+    const val VERDICT_PREFIX = "squishy_v:"
+
+    private fun verdictKey(situation: String?, mediaId: String) =
+        VERDICT_PREFIX + (situation ?: "") + "|" + mediaId
 
     fun onThumb(activity: MainActivity, item: MediaItem?, urteil: String, onDone: () -> Unit) {
         if (item == null) return
         val grund = if (urteil == NEIN) "passt_nicht" else null
         // Erneutes Tippen auf den aktiven Daumen nimmt das Urteil zurück.
         if (currentVerdict(item) == urteil)
-            record(activity, item, null, "zurueckgenommen", null, onDone)
+            record(activity, item, queueTitle, null, "zurueckgenommen", null, "knopf", onDone)
         else
-            record(activity, item, urteil, grund, null, onDone)
+            record(activity, item, queueTitle, urteil, grund, null, "knopf", onDone)
+    }
+
+    /** Wischen in einer Playlist: [listTitle] ist die angezeigte Liste. */
+    fun onSwipe(
+        activity: MainActivity, item: MediaItem, listTitle: String, urteil: String,
+        onDone: () -> Unit
+    ) {
+        val grund = if (urteil == NEIN) "passt_nicht" else null
+        record(activity, item, listTitle, urteil, grund, null, "wischen", onDone, undo = true)
     }
 
     fun showMenu(activity: MainActivity, anchor: View, item: MediaItem?, onDone: () -> Unit) {
@@ -119,13 +142,13 @@ object Feedback {
         menu.menuInflater.inflate(R.menu.squishy_feedback_menu, menu.menu)
         menu.setOnMenuItemClickListener {
             when (it.itemId) {
-                R.id.squishy_passt_nicht -> record(activity, item, NEIN, "passt_nicht", null, onDone)
-                R.id.squishy_mag_nicht -> record(activity, item, NEIN, "mag_nicht", null, onDone)
-                R.id.squishy_falsche_version -> record(activity, item, NEIN, "falsche_version", null, onDone)
-                R.id.squishy_defekt -> record(activity, item, NEIN, "defekt", null, onDone)
-                R.id.squishy_spaeter -> record(activity, item, SPAETER, null, null, onDone)
+                R.id.squishy_passt_nicht -> record(activity, item, queueTitle, NEIN, "passt_nicht", null, "knopf", onDone)
+                R.id.squishy_mag_nicht -> record(activity, item, queueTitle, NEIN, "mag_nicht", null, "knopf", onDone)
+                R.id.squishy_falsche_version -> record(activity, item, queueTitle, NEIN, "falsche_version", null, "knopf", onDone)
+                R.id.squishy_defekt -> record(activity, item, queueTitle, NEIN, "defekt", null, "knopf", onDone)
+                R.id.squishy_spaeter -> record(activity, item, queueTitle, SPAETER, null, null, "knopf", onDone)
                 R.id.squishy_notiz -> askText(activity, R.string.squishy_notiz, null) { text ->
-                    record(activity, item, null, null, text, onDone)
+                    record(activity, item, queueTitle, null, null, text, "knopf", onDone)
                 }
                 R.id.squishy_einrichten -> setup(activity, force = true) {}
                 else -> return@setOnMenuItemClickListener false
@@ -136,13 +159,13 @@ object Feedback {
     }
 
     private fun record(
-        activity: MainActivity, item: MediaItem, urteil: String?, grund: String?,
-        notiz: String?, onDone: () -> Unit
+        activity: MainActivity, item: MediaItem, listTitle: String?, urteil: String?,
+        grund: String?, notiz: String?, quelle: String, onDone: () -> Unit, undo: Boolean = false
     ) {
         init(activity)
         setup(activity, force = false) {
             activity.lifecycleScope.launch {
-                val event = buildEvent(activity, item, urteil, grund, notiz)
+                val event = buildEvent(activity, item, listTitle, urteil, grund, notiz, quelle)
                 val error = withContext(Dispatchers.IO) {
                     runCatching { append(activity.contentResolver, event) }.exceptionOrNull()
                 }
@@ -151,17 +174,31 @@ object Feedback {
                         error.message), Toast.LENGTH_LONG).show()
                     return@launch
                 }
+                val situation = event.opt("playlist") as? String
+                val previous = verdict(situation, item.mediaId)
                 if (notiz == null) {
                     prefs!!.edit {
-                        if (urteil == null) remove(verdictKey(item))
-                        else putString(verdictKey(item), urteil)
+                        if (urteil == null) remove(verdictKey(situation, item.mediaId))
+                        else putString(verdictKey(situation, item.mediaId), urteil)
                     }
                 }
-                val ziel = event.optString("playlist").ifEmpty {
-                    activity.getString(R.string.squishy_ohne_playlist)
+                val text = activity.getString(R.string.squishy_gespeichert,
+                    label(activity, urteil, grund, notiz),
+                    situation ?: activity.getString(R.string.squishy_ohne_playlist))
+                if (undo && previous != urteil) {
+                    Snackbar.make(activity.findViewById(R.id.container), text, 5000)
+                        .setAction(R.string.squishy_rueckgaengig) {
+                            if (previous == null)
+                                record(activity, item, listTitle, null, "zurueckgenommen", null,
+                                    quelle, onDone)
+                            else
+                                record(activity, item, listTitle, previous,
+                                    if (previous == NEIN) "passt_nicht" else null, null, quelle, onDone)
+                        }
+                        .show()
+                } else {
+                    Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
                 }
-                Toast.makeText(activity, activity.getString(R.string.squishy_gespeichert,
-                    label(activity, urteil, grund, notiz), ziel), Toast.LENGTH_SHORT).show()
                 onDone()
             }
         }
@@ -180,20 +217,26 @@ object Feedback {
         })
 
     private suspend fun buildEvent(
-        activity: MainActivity, item: MediaItem, urteil: String?, grund: String?, notiz: String?
+        activity: MainActivity, item: MediaItem, listTitle: String?, urteil: String?,
+        grund: String?, notiz: String?, quelle: String
     ): JSONObject {
-        val queue = queueTitle
-        val playlist = if (queue == null) null else activity.reader.playlistListFlow.first()
-            .firstOrNull { it.javaClass == Playlist::class.java && it.title == queue }
+        val playlists = activity.reader.playlistListFlow.first()
+            .filter { it.javaClass == Playlist::class.java }
+        val list = if (listTitle == null) null else playlists.firstOrNull { it.title == listTitle }
             ?.takeIf { pl -> pl.songList.any { it.mediaId == item.mediaId } }
-        val beschreibung = playlist?.path?.let { withContext(Dispatchers.IO) { readDescription(it) } }
+        val situation = situationOf(list?.title)
+        val parent = playlists.firstOrNull { it.title == situation }
+        val beschreibung = withContext(Dispatchers.IO) {
+            list?.path?.let { readDescription(it) } ?: parent?.path?.let { readDescription(it) }
+        }
         val meta = item.mediaMetadata
         return JSONObject().apply {
             put("zeit", OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
             put("person", prefs!!.getString(KEY_PERSON, null))
-            put("playlist", playlist?.title ?: JSONObject.NULL)
+            put("playlist", situation ?: JSONObject.NULL)
+            put("liste", list?.title ?: JSONObject.NULL)
             put("beschreibung", beschreibung ?: JSONObject.NULL)
-            put("warteschlange", queue ?: JSONObject.NULL)
+            put("warteschlange", queueTitle ?: JSONObject.NULL)
             put("pfad", item.getFile()?.path ?: JSONObject.NULL)
             put("interpret", meta.artist?.toString() ?: JSONObject.NULL)
             put("titel", meta.title?.toString() ?: JSONObject.NULL)
@@ -201,12 +244,12 @@ object Feedback {
             put("urteil", urteil ?: JSONObject.NULL)
             put("grund", grund ?: JSONObject.NULL)
             put("notiz", notiz ?: JSONObject.NULL)
-            put("quelle", "knopf")
+            put("quelle", quelle)
             put("app", BuildConfig.VERSION_NAME)
         }
     }
 
-    private fun readDescription(file: File): String? = runCatching {
+    fun readDescription(file: File): String? = runCatching {
         file.useLines { lines ->
             lines.take(20).firstOrNull { it.startsWith(DESCRIPTION_PREFIX) }
                 ?.removePrefix(DESCRIPTION_PREFIX)?.trim()?.ifEmpty { null }

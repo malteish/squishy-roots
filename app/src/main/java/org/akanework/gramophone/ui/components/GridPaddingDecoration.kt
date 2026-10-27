@@ -56,7 +56,8 @@ class GridPaddingDecoration(context: Context) : RecyclerView.ItemDecoration() {
             }
             throw IllegalStateException("can't find desired adapter?")
         }
-        if (adapter is BaseDecorAdapter<*> || adapter is DetailedFolderAdapter.FolderCardAdapter) {
+        if (adapter is BaseDecorAdapter<*> || adapter is DetailedFolderAdapter.FolderCardAdapter ||
+            adapter is com.malteish.squishyroots.PlaylistSituation.FullSpan) {
             return
         }
         if (adapter !is BaseAdapter<*>) {

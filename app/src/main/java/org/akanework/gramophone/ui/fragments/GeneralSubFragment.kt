@@ -79,6 +79,7 @@ class GeneralSubFragment : BaseFragment(true) {
         val id = bundle.getString("Id")?.toLong()
 
         val title: Flow<String>
+        var squishyPlaylist: Flow<Playlist?>? = null
         var rawOrderExposed: Sorter.Type? = null
 
         when (itemType) {
@@ -139,6 +140,7 @@ class GeneralSubFragment : BaseFragment(true) {
                     }
                 }
                 itemList = item.map { it?.songList }
+                squishyPlaylist = item
                 rawOrderExposed = Sorter.Type.NaturalOrder
                 if (clazz == Playlist::class.java.name) {
                     topAppBar.inflateMenu(R.menu.playlist_subfragment_menu)
@@ -179,6 +181,11 @@ class GeneralSubFragment : BaseFragment(true) {
                 rawOrderExposed = rawOrderExposed,
                 isSubFragment = itemType
             )
+
+        squishyPlaylist?.let {
+            com.malteish.squishyroots.PlaylistSituation.attach(
+                this, mainActivity, recyclerView, songAdapter, it)
+        }
 
         recyclerView.enableEdgeToEdgePaddingListener()
         recyclerView.setAppBar(appBarLayout)

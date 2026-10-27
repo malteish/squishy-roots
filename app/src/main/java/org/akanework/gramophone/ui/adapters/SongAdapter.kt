@@ -98,6 +98,9 @@ class SongAdapter(
 
     fun getSongList() = list?.second ?: emptyList()
 
+    /** Squishy Roots: Situation dieser Liste, für die Markierung bewerteter Titel. */
+    var squishySituation: String? = null
+
     fun getActivity() = mainActivity
 
     private var showFileNames = false
@@ -357,6 +360,8 @@ class SongAdapter(
             }
         } else {
             super.onBindViewHolder(holder, position, payloads)
+            com.malteish.squishyroots.PlaylistSituation.decorate(
+                holder.subTitle, squishySituation, getSongList()[position].mediaId)
             if (currentMediaItem == null || getSongList()[position].mediaId != currentMediaItem)
                 return
         }

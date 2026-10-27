@@ -91,6 +91,10 @@ class CustomGridLayoutManager(
                             spanCount
                         }
 
+                        is com.malteish.squishyroots.PlaylistSituation.FullSpan -> {
+                            spanCount
+                        }
+
                         is BaseAdapter<*> -> {
                             adapter.getSpanSize()
                         }
@@ -109,6 +113,10 @@ class CustomGridLayoutManager(
                         }
 
                         is DetailedFolderAdapter.FolderCardAdapter -> {
+                            0
+                        }
+
+                        is com.malteish.squishyroots.PlaylistSituation.FullSpan -> {
                             0
                         }
 
