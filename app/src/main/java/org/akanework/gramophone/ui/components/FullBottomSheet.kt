@@ -277,7 +277,8 @@ class FullBottomSheet
     private var pqs: PlaylistQueueSheet? = null
 
     init {
-        inflate(context, R.layout.full_player, this)
+        inflate(context, if (com.malteish.squishyroots.SplitView.isActive(context))
+            R.layout.full_player_portrait else R.layout.full_player, this)
         bottomSheetFullCoverFrame = findViewById(R.id.album_cover_frame)
         bottomSheetFullCover = findViewById(R.id.full_sheet_cover)
         bottomSheetFullTitle = findViewById(R.id.full_song_name)

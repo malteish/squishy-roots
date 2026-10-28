@@ -188,6 +188,17 @@ class PlayerBottomSheet private constructor(
                     bottomSheetBackCallback!!.isEnabled = false
                 }
             }
+            // Squishy Roots: geteilte Ansicht auf Tablets im Querformat.
+            if (com.malteish.squishyroots.SplitView.isActive(context)) {
+                when (newState) {
+                    BottomSheetBehavior.STATE_EXPANDED, BottomSheetBehavior.STATE_HALF_EXPANDED ->
+                        com.malteish.squishyroots.SplitView.onPlayerExpanded(fragmentContainer, true)
+                    BottomSheetBehavior.STATE_COLLAPSED, BottomSheetBehavior.STATE_HIDDEN ->
+                        com.malteish.squishyroots.SplitView.onPlayerExpanded(fragmentContainer, false)
+                }
+                // Zurück gehört der Liste, der Player schließt über seinen Pfeil.
+                bottomSheetBackCallback!!.isEnabled = false
+            }
             dispatchBottomSheetInsets()
         }
 
@@ -211,6 +222,7 @@ class PlayerBottomSheet private constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         doOnLayout { // wait for CoordinatorLayout to finish to allow getting behaviour
+            com.malteish.squishyroots.SplitView.setUpSheet(this)
             standardBottomSheetBehavior = MyBottomSheetBehavior.from(this)
             fullPlayer.minimize = {
                 standardBottomSheetBehavior!!.state = BottomSheetBehavior.STATE_COLLAPSED
