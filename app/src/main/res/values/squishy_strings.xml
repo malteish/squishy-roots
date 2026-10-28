@@ -2,6 +2,7 @@
 <!-- Squishy Roots: Feedback. Bewusst nur auf Deutsch. -->
 <resources>
     <string name="squishy_ja">Passt hierher</string>
+    <string name="squishy_bewertung">Bewertung</string>
     <string name="squishy_passt_nicht">Passt nicht hierher</string>
     <string name="squishy_mag_nicht">Mag ich gar nicht</string>
     <string name="squishy_falsche_version">Falsche Version</string>

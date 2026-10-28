@@ -101,6 +101,20 @@ class SongAdapter(
     /** Squishy Roots: Situation dieser Liste, für die Markierung bewerteter Titel. */
     var squishySituation: String? = null
 
+    /** Squishy Roots: angezeigte Playlist, für das Bewertungsmenü. */
+    var squishyListTitle: String? = null
+
+    /** Squishy Roots: sichtbare Zeile eines Titels, als Startpunkt für den Effekt. */
+    private fun squishyRowView(item: MediaItem): View? {
+        val rv = recyclerView ?: return null
+        val p = getSongList().indexOfFirst { it.mediaId == item.mediaId }
+        for (i in 0 until rv.childCount) {
+            val h = rv.getChildViewHolder(rv.getChildAt(i))
+            if (h.bindingAdapter === this && h.bindingAdapterPosition == p) return h.itemView
+        }
+        return null
+    }
+
     fun getActivity() = mainActivity
 
     private var showFileNames = false
@@ -241,6 +255,9 @@ class SongAdapter(
 
     override fun onMenu(item: MediaItem, popupMenu: PopupMenu) {
         popupMenu.inflate(R.menu.more_menu)
+        val squishyList = squishyListTitle
+        if (squishyList != null)
+            com.malteish.squishyroots.Feedback.addListMenu(mainActivity, popupMenu.menu)
 
         popupMenu.setOnMenuItemClickListener { it1 ->
             when (it1.itemId) {
@@ -339,7 +356,14 @@ class SongAdapter(
                     true
                 }
 
-                else -> false
+                else -> squishyList != null && com.malteish.squishyroots.Feedback.handleMenuItem(
+                    mainActivity, squishyRowView(item) ?: recyclerView
+                        ?: mainActivity.findViewById(R.id.container),
+                    item, squishyList, it1.itemId, "liste"
+                ) {
+                    val p = getSongList().indexOfFirst { it.mediaId == item.mediaId }
+                    if (p >= 0) notifyItemChanged(p)
+                }
             }
         }
     }

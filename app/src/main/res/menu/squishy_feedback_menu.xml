@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/squishy_passt_hierher" android:title="@string/squishy_ja" />
     <item android:id="@+id/squishy_passt_nicht" android:title="@string/squishy_passt_nicht" />
     <item android:id="@+id/squishy_mag_nicht" android:title="@string/squishy_mag_nicht" />
     <item android:id="@+id/squishy_falsche_version" android:title="@string/squishy_falsche_version" />

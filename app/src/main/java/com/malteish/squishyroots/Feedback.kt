@@ -169,29 +169,53 @@ object Feedback {
         if (item == null) return
         val menu = PopupMenu(activity, anchor)
         menu.menuInflater.inflate(R.menu.squishy_feedback_menu, menu.menu)
-        // Gründe übernehmen eine vorhandene negative Stärke, sonst 1. „Mag ich gar nicht“ ist 3.
-        val negative = minOf(currentScore(item), -1)
         menu.setOnMenuItemClickListener {
-            if (it.itemId == R.id.squishy_mag_nicht)
-                Burst.play(activity, anchor, false, MAX_STRENGTH)
-            else if (it.itemId in setOf(R.id.squishy_passt_nicht, R.id.squishy_falsche_version, R.id.squishy_defekt))
-                Burst.play(activity, anchor, false, -negative)
-            when (it.itemId) {
-                R.id.squishy_passt_nicht -> record(activity, item, queueTitle, negative, "passt_nicht", null, "knopf", onDone)
-                R.id.squishy_mag_nicht -> record(activity, item, queueTitle, -MAX_STRENGTH, "mag_nicht", null, "knopf", onDone)
-                R.id.squishy_falsche_version -> record(activity, item, queueTitle, negative, "falsche_version", null, "knopf", onDone)
-                R.id.squishy_defekt -> record(activity, item, queueTitle, negative, "defekt", null, "knopf", onDone)
-                R.id.squishy_spaeter -> record(activity, item, queueTitle, 0, "spaeter", null, "knopf", onDone)
-                R.id.squishy_zuruecknehmen -> record(activity, item, queueTitle, 0, "zurueckgenommen", null, "knopf", onDone)
-                R.id.squishy_notiz -> askText(activity, R.string.squishy_notiz, null) { text ->
-                    record(activity, item, queueTitle, null, null, text, "knopf", onDone)
-                }
-                R.id.squishy_einrichten -> setup(activity, force = true) {}
-                else -> return@setOnMenuItemClickListener false
-            }
-            true
+            handleMenuItem(activity, anchor, item, queueTitle, it.itemId, "knopf", onDone)
         }
         menu.show()
+    }
+
+    /** Bewertungsmenü als Untermenü im Kontextmenü eines Titels in einer Playlist. */
+    fun addListMenu(activity: MainActivity, menu: android.view.Menu) {
+        val sub = menu.addSubMenu(R.string.squishy_bewertung)
+        activity.menuInflater.inflate(R.menu.squishy_feedback_menu, sub)
+    }
+
+    /** Führt einen Eintrag aus [R.menu.squishy_feedback_menu] aus. false: kein solcher Eintrag. */
+    fun handleMenuItem(
+        activity: MainActivity, anchor: View, item: MediaItem, listTitle: String?, itemId: Int,
+        quelle: String, onDone: () -> Unit
+    ): Boolean {
+        val current = score(situationOf(listTitle), item.mediaId)
+        // Gründe übernehmen eine vorhandene negative Stärke, sonst 1. „Mag ich gar nicht“ ist 3.
+        val negative = minOf(current, -1)
+        when (itemId) {
+            R.id.squishy_passt_hierher -> {
+                val next = step(current, true)
+                Burst.play(activity, anchor, true, next)
+                record(activity, item, listTitle, next, null, null, quelle, onDone)
+            }
+            R.id.squishy_passt_nicht, R.id.squishy_falsche_version, R.id.squishy_defekt -> {
+                Burst.play(activity, anchor, false, -negative)
+                record(activity, item, listTitle, negative, when (itemId) {
+                    R.id.squishy_falsche_version -> "falsche_version"
+                    R.id.squishy_defekt -> "defekt"
+                    else -> "passt_nicht"
+                }, null, quelle, onDone)
+            }
+            R.id.squishy_mag_nicht -> {
+                Burst.play(activity, anchor, false, MAX_STRENGTH)
+                record(activity, item, listTitle, -MAX_STRENGTH, "mag_nicht", null, quelle, onDone)
+            }
+            R.id.squishy_spaeter -> record(activity, item, listTitle, 0, "spaeter", null, quelle, onDone)
+            R.id.squishy_zuruecknehmen -> record(activity, item, listTitle, 0, "zurueckgenommen", null, quelle, onDone)
+            R.id.squishy_notiz -> askText(activity, R.string.squishy_notiz, null) { text ->
+                record(activity, item, listTitle, null, null, text, quelle, onDone)
+            }
+            R.id.squishy_einrichten -> setup(activity, force = true) {}
+            else -> return false
+        }
+        return true
     }
 
     /**

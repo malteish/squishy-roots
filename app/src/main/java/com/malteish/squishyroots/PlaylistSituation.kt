@@ -69,6 +69,7 @@ object PlaylistSituation {
                 .collect { (pl, all) ->
                     val title = pl?.title?.takeIf { pl.javaClass == Playlist::class.java }
                     listTitle = title
+                    songAdapter.squishyListTitle = title
                     val situation = Feedback.situationOf(title)
                     val parent = all.firstOrNull { it.title == situation }
                     val candidates = if (title == null || title.endsWith(Feedback.CANDIDATE_SUFFIX)) null
