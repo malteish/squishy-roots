@@ -518,12 +518,12 @@ abstract class BaseAdapter<T : Any>(
         // position here refers to pos in ConcatAdapter(!)
         // if this crashes with IndexOutOfBoundsException, list access isn't guarded enough?
         // lib only ever gets popup text for what RecyclerView believes to be the first view
-        val daic = decorAdapter.itemCount
-        return (if (position >= daic)
-            sorter.getFastScrollHintFor(
-                list!!.second[position - daic],
-                position - daic, sortType.value
-            )
+        // Squishy Roots: vor diesem Adapter kann außer decorAdapter noch ein Kopf liegen.
+        val daic = concatAdapter.adapters.takeWhile { it !== this }.sumOf { it.itemCount }
+        val items = list?.second ?: return "-"
+        val index = position - daic
+        return (if (index in items.indices)
+            sorter.getFastScrollHintFor(items[index], index, sortType.value)
         else null) ?: "-"
     }
 
