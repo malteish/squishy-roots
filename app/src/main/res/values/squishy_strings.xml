@@ -15,11 +15,8 @@
     <string name="squishy_person">Wer hört? (z. B. malte)</string>
     <string name="squishy_ordner">Ordner für Feedback</string>
     <string name="squishy_ordner_hinweis">Bitte den Musikordner wählen, den Syncthing synchronisiert. Das Feedback landet dort unter feedback/.</string>
-    <string name="squishy_gespeichert">%1$s · %2$s</string>
-    <string name="squishy_ohne_playlist">ohne Playlist</string>
     <string name="squishy_fehler">Feedback nicht gespeichert: %1$s</string>
     <string name="squishy_daumen_hoch">Daumen hoch (lang drücken: mehr)</string>
-    <string name="squishy_rueckgaengig">Rückgängig</string>
     <string name="squishy_stoebern">Stöbern: %1$d Vorschläge</string>
     <string name="squishy_daumen_runter">Daumen runter (lang drücken: mehr)</string>
 </resources>

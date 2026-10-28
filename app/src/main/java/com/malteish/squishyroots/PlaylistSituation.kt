@@ -188,7 +188,9 @@ object PlaylistSituation {
             val items = songAdapter.getSongList()
             if (pos == RecyclerView.NO_POSITION || pos >= items.size || title == null) return
             val item = items[pos]
-            Feedback.onSwipe(activity, item, title, dx > 0) {
+            val v = holder.itemView
+            val row = android.graphics.Rect(v.left, v.top, v.right, v.bottom)
+            Feedback.onSwipe(activity, rv, row, item, title, dx > 0) {
                 val p = songAdapter.getSongList().indexOfFirst { it.mediaId == item.mediaId }
                 if (p >= 0) songAdapter.notifyItemChanged(p)
             }

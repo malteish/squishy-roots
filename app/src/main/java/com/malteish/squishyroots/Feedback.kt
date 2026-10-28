@@ -26,7 +26,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.preference.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -138,22 +137,32 @@ object Feedback {
     private fun scoreKey(situation: String?, mediaId: String) =
         SCORE_PREFIX + (situation ?: "") + "|" + mediaId
 
-    fun onThumb(activity: MainActivity, item: MediaItem?, up: Boolean, onDone: () -> Unit) {
+    fun onThumb(
+        activity: MainActivity, button: View, item: MediaItem?, up: Boolean, onDone: () -> Unit
+    ) {
         if (item == null) return
         val next = step(currentScore(item), up)
+        Burst.play(activity, button, up, kotlin.math.abs(next))
         record(activity, item, queueTitle, next, if (next < 0) "passt_nicht" else null, null,
             "knopf", onDone)
     }
 
-    /** Wischen in einer Playlist: [listTitle] ist die angezeigte Liste. */
+    /**
+     * Wischen in einer Playlist: [listTitle] ist die angezeigte Liste. Der Effekt startet in
+     * [row] (Koordinaten von [list]) auf der Seite, zu der gewischt wurde.
+     */
     fun onSwipe(
-        activity: MainActivity, item: MediaItem, listTitle: String, up: Boolean,
-        onDone: () -> Unit
+        activity: MainActivity, list: View, row: android.graphics.Rect, item: MediaItem,
+        listTitle: String, up: Boolean, onDone: () -> Unit
     ) {
         val situation = situationOf(listTitle)
         val next = step(score(situation, item.mediaId), up)
+        val side = row.height()
+        val spot = if (up) android.graphics.Rect(row.left, row.top, row.left + side, row.bottom)
+        else android.graphics.Rect(row.right - side, row.top, row.right, row.bottom)
+        Burst.play(activity, list, up, kotlin.math.abs(next), spot)
         record(activity, item, listTitle, next, if (next < 0) "passt_nicht" else null, null,
-            "wischen", onDone, undo = true)
+            "wischen", onDone)
     }
 
     fun showMenu(activity: MainActivity, anchor: View, item: MediaItem?, onDone: () -> Unit) {
@@ -163,6 +172,10 @@ object Feedback {
         // Gründe übernehmen eine vorhandene negative Stärke, sonst 1. „Mag ich gar nicht“ ist 3.
         val negative = minOf(currentScore(item), -1)
         menu.setOnMenuItemClickListener {
+            if (it.itemId == R.id.squishy_mag_nicht)
+                Burst.play(activity, anchor, false, MAX_STRENGTH)
+            else if (it.itemId in setOf(R.id.squishy_passt_nicht, R.id.squishy_falsche_version, R.id.squishy_defekt))
+                Burst.play(activity, anchor, false, -negative)
             when (it.itemId) {
                 R.id.squishy_passt_nicht -> record(activity, item, queueTitle, negative, "passt_nicht", null, "knopf", onDone)
                 R.id.squishy_mag_nicht -> record(activity, item, queueTitle, -MAX_STRENGTH, "mag_nicht", null, "knopf", onDone)
@@ -187,64 +200,36 @@ object Feedback {
      */
     private fun record(
         activity: MainActivity, item: MediaItem, listTitle: String?, score: Int?,
-        grund: String?, notiz: String?, quelle: String, onDone: () -> Unit, undo: Boolean = false
+        grund: String?, notiz: String?, quelle: String, onDone: () -> Unit
     ) {
         init(activity)
         setup(activity, force = false) {
+            // Sofort merken: Mehrmals schnell tippen muss auf dem neuen Stand aufbauen.
+            val key = situationOf(listTitle)
+            val previous = score(key, item.mediaId)
+            if (score != null) storeScore(key, item.mediaId, score)
+            onDone()
             activity.lifecycleScope.launch {
                 val event = buildEvent(activity, item, listTitle, score, grund, notiz, quelle)
                 val error = withContext(Dispatchers.IO) {
                     runCatching { append(activity.contentResolver, event) }.exceptionOrNull()
                 }
                 if (error != null) {
+                    if (score != null) storeScore(key, item.mediaId, previous)
+                    onDone()
                     Toast.makeText(activity, activity.getString(R.string.squishy_fehler,
                         error.message), Toast.LENGTH_LONG).show()
-                    return@launch
                 }
-                val situation = event.opt("playlist") as? String
-                val previous = score(situation, item.mediaId)
-                if (score != null) {
-                    prefs!!.edit {
-                        if (score == 0) remove(scoreKey(situation, item.mediaId))
-                        else putInt(scoreKey(situation, item.mediaId), score)
-                        remove(VERDICT_PREFIX + (situation ?: "") + "|" + item.mediaId)
-                    }
-                }
-                val text = activity.getString(R.string.squishy_gespeichert,
-                    label(activity, score, grund, notiz),
-                    situation ?: activity.getString(R.string.squishy_ohne_playlist))
-                if (undo && score != null && previous != score) {
-                    Snackbar.make(activity.findViewById(R.id.container), text, 5000)
-                        .setAction(R.string.squishy_rueckgaengig) {
-                            record(activity, item, listTitle, previous,
-                                when {
-                                    previous == 0 -> "zurueckgenommen"
-                                    previous < 0 -> "passt_nicht"
-                                    else -> null
-                                }, null, quelle, onDone)
-                        }
-                        .show()
-                } else {
-                    Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
-                }
-                onDone()
             }
         }
     }
 
-    private fun label(context: Context, score: Int?, grund: String?, notiz: String?): String {
-        val base = context.getString(when {
-            notiz != null -> R.string.squishy_notiz
-            grund == "zurueckgenommen" -> R.string.squishy_zurueckgenommen
-            grund == "spaeter" -> R.string.squishy_spaeter
-            score != null && score > 0 -> R.string.squishy_ja
-            grund == "mag_nicht" -> R.string.squishy_mag_nicht
-            grund == "falsche_version" -> R.string.squishy_falsche_version
-            grund == "defekt" -> R.string.squishy_defekt
-            else -> R.string.squishy_passt_nicht
-        })
-        return if (score == null || score == 0) base
-        else base + " " + (if (score > 0) "+" else "−").repeat(kotlin.math.abs(score))
+    private fun storeScore(situation: String?, mediaId: String, score: Int) {
+        prefs!!.edit {
+            if (score == 0) remove(scoreKey(situation, mediaId))
+            else putInt(scoreKey(situation, mediaId), score)
+            remove(VERDICT_PREFIX + (situation ?: "") + "|" + mediaId)
+        }
     }
 
     private suspend fun buildEvent(

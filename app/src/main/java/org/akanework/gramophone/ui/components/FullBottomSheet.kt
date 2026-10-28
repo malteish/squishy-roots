@@ -505,7 +505,7 @@ class FullBottomSheet
         for ((button, up) in listOf(squishyThumbUp to true, squishyThumbDown to false)) {
             button.setOnClickListener {
                 ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.CONTEXT_CLICK)
-                Feedback.onThumb(activity, instance?.currentMediaItem, up) { updateThumbs() }
+                Feedback.onThumb(activity, it, instance?.currentMediaItem, up) { updateThumbs() }
             }
             button.setOnLongClickListener {
                 ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.LONG_PRESS)
