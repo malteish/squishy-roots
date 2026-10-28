@@ -104,49 +104,72 @@ object Feedback {
         prefs?.edit { putString(KEY_QUEUE, title) }
     }
 
-    /** Letztes Urteil zu diesem Titel in der aktuellen Warteschlange (für den Player). */
-    fun currentVerdict(item: MediaItem?): String? =
-        if (item == null) null else verdict(situationOf(queueTitle), item.mediaId)
+    /**
+     * Bewertung als Zahl: +1 bis +3 (passt hierher, wie stark), −1 bis −3 (passt nicht), 0 keine.
+     * Jedes weitere Tippen oder Wischen in dieselbe Richtung verstärkt bis 3. Die Gegenrichtung
+     * beginnt wieder bei 1.
+     */
+    const val MAX_STRENGTH = 3
 
-    /** Letztes Urteil zu einem Titel in einer Situation (für die Markierung in Listen). */
-    fun verdict(situation: String?, mediaId: String): String? =
-        prefs?.getString(verdictKey(situation, mediaId), null)
+    fun step(current: Int, up: Boolean): Int =
+        if (up) (if (current <= 0) 1 else minOf(current + 1, MAX_STRENGTH))
+        else (if (current >= 0) -1 else maxOf(current - 1, -MAX_STRENGTH))
+
+    /** Bewertung des laufenden Titels in der Situation der Warteschlange (für den Player). */
+    fun currentScore(item: MediaItem?): Int =
+        if (item == null) 0 else score(situationOf(queueTitle), item.mediaId)
+
+    /** Bewertung eines Titels in einer Situation (für die Markierung in Listen). */
+    fun score(situation: String?, mediaId: String): Int {
+        val p = prefs ?: return 0
+        val key = scoreKey(situation, mediaId)
+        if (p.contains(key)) return p.getInt(key, 0)
+        // Bis v0.3.0 als Text ja/nein gespeichert.
+        return when (p.getString(VERDICT_PREFIX + (situation ?: "") + "|" + mediaId, null)) {
+            JA -> 1
+            NEIN -> -1
+            else -> 0
+        }
+    }
 
     const val VERDICT_PREFIX = "squishy_v:"
+    const val SCORE_PREFIX = "squishy_s:"
 
-    private fun verdictKey(situation: String?, mediaId: String) =
-        VERDICT_PREFIX + (situation ?: "") + "|" + mediaId
+    private fun scoreKey(situation: String?, mediaId: String) =
+        SCORE_PREFIX + (situation ?: "") + "|" + mediaId
 
-    fun onThumb(activity: MainActivity, item: MediaItem?, urteil: String, onDone: () -> Unit) {
+    fun onThumb(activity: MainActivity, item: MediaItem?, up: Boolean, onDone: () -> Unit) {
         if (item == null) return
-        val grund = if (urteil == NEIN) "passt_nicht" else null
-        // Erneutes Tippen auf den aktiven Daumen nimmt das Urteil zurück.
-        if (currentVerdict(item) == urteil)
-            record(activity, item, queueTitle, null, "zurueckgenommen", null, "knopf", onDone)
-        else
-            record(activity, item, queueTitle, urteil, grund, null, "knopf", onDone)
+        val next = step(currentScore(item), up)
+        record(activity, item, queueTitle, next, if (next < 0) "passt_nicht" else null, null,
+            "knopf", onDone)
     }
 
     /** Wischen in einer Playlist: [listTitle] ist die angezeigte Liste. */
     fun onSwipe(
-        activity: MainActivity, item: MediaItem, listTitle: String, urteil: String,
+        activity: MainActivity, item: MediaItem, listTitle: String, up: Boolean,
         onDone: () -> Unit
     ) {
-        val grund = if (urteil == NEIN) "passt_nicht" else null
-        record(activity, item, listTitle, urteil, grund, null, "wischen", onDone, undo = true)
+        val situation = situationOf(listTitle)
+        val next = step(score(situation, item.mediaId), up)
+        record(activity, item, listTitle, next, if (next < 0) "passt_nicht" else null, null,
+            "wischen", onDone, undo = true)
     }
 
     fun showMenu(activity: MainActivity, anchor: View, item: MediaItem?, onDone: () -> Unit) {
         if (item == null) return
         val menu = PopupMenu(activity, anchor)
         menu.menuInflater.inflate(R.menu.squishy_feedback_menu, menu.menu)
+        // Gründe übernehmen eine vorhandene negative Stärke, sonst 1. „Mag ich gar nicht“ ist 3.
+        val negative = minOf(currentScore(item), -1)
         menu.setOnMenuItemClickListener {
             when (it.itemId) {
-                R.id.squishy_passt_nicht -> record(activity, item, queueTitle, NEIN, "passt_nicht", null, "knopf", onDone)
-                R.id.squishy_mag_nicht -> record(activity, item, queueTitle, NEIN, "mag_nicht", null, "knopf", onDone)
-                R.id.squishy_falsche_version -> record(activity, item, queueTitle, NEIN, "falsche_version", null, "knopf", onDone)
-                R.id.squishy_defekt -> record(activity, item, queueTitle, NEIN, "defekt", null, "knopf", onDone)
-                R.id.squishy_spaeter -> record(activity, item, queueTitle, SPAETER, null, null, "knopf", onDone)
+                R.id.squishy_passt_nicht -> record(activity, item, queueTitle, negative, "passt_nicht", null, "knopf", onDone)
+                R.id.squishy_mag_nicht -> record(activity, item, queueTitle, -MAX_STRENGTH, "mag_nicht", null, "knopf", onDone)
+                R.id.squishy_falsche_version -> record(activity, item, queueTitle, negative, "falsche_version", null, "knopf", onDone)
+                R.id.squishy_defekt -> record(activity, item, queueTitle, negative, "defekt", null, "knopf", onDone)
+                R.id.squishy_spaeter -> record(activity, item, queueTitle, 0, "spaeter", null, "knopf", onDone)
+                R.id.squishy_zuruecknehmen -> record(activity, item, queueTitle, 0, "zurueckgenommen", null, "knopf", onDone)
                 R.id.squishy_notiz -> askText(activity, R.string.squishy_notiz, null) { text ->
                     record(activity, item, queueTitle, null, null, text, "knopf", onDone)
                 }
@@ -158,14 +181,18 @@ object Feedback {
         menu.show()
     }
 
+    /**
+     * [score] null heißt: Bewertung bleibt (nur Notiz). 0 mit Grund „spaeter“ oder
+     * „zurueckgenommen“ löscht sie.
+     */
     private fun record(
-        activity: MainActivity, item: MediaItem, listTitle: String?, urteil: String?,
+        activity: MainActivity, item: MediaItem, listTitle: String?, score: Int?,
         grund: String?, notiz: String?, quelle: String, onDone: () -> Unit, undo: Boolean = false
     ) {
         init(activity)
         setup(activity, force = false) {
             activity.lifecycleScope.launch {
-                val event = buildEvent(activity, item, listTitle, urteil, grund, notiz, quelle)
+                val event = buildEvent(activity, item, listTitle, score, grund, notiz, quelle)
                 val error = withContext(Dispatchers.IO) {
                     runCatching { append(activity.contentResolver, event) }.exceptionOrNull()
                 }
@@ -175,25 +202,26 @@ object Feedback {
                     return@launch
                 }
                 val situation = event.opt("playlist") as? String
-                val previous = verdict(situation, item.mediaId)
-                if (notiz == null) {
+                val previous = score(situation, item.mediaId)
+                if (score != null) {
                     prefs!!.edit {
-                        if (urteil == null) remove(verdictKey(situation, item.mediaId))
-                        else putString(verdictKey(situation, item.mediaId), urteil)
+                        if (score == 0) remove(scoreKey(situation, item.mediaId))
+                        else putInt(scoreKey(situation, item.mediaId), score)
+                        remove(VERDICT_PREFIX + (situation ?: "") + "|" + item.mediaId)
                     }
                 }
                 val text = activity.getString(R.string.squishy_gespeichert,
-                    label(activity, urteil, grund, notiz),
+                    label(activity, score, grund, notiz),
                     situation ?: activity.getString(R.string.squishy_ohne_playlist))
-                if (undo && previous != urteil) {
+                if (undo && score != null && previous != score) {
                     Snackbar.make(activity.findViewById(R.id.container), text, 5000)
                         .setAction(R.string.squishy_rueckgaengig) {
-                            if (previous == null)
-                                record(activity, item, listTitle, null, "zurueckgenommen", null,
-                                    quelle, onDone)
-                            else
-                                record(activity, item, listTitle, previous,
-                                    if (previous == NEIN) "passt_nicht" else null, null, quelle, onDone)
+                            record(activity, item, listTitle, previous,
+                                when {
+                                    previous == 0 -> "zurueckgenommen"
+                                    previous < 0 -> "passt_nicht"
+                                    else -> null
+                                }, null, quelle, onDone)
                         }
                         .show()
                 } else {
@@ -204,22 +232,32 @@ object Feedback {
         }
     }
 
-    private fun label(context: Context, urteil: String?, grund: String?, notiz: String?): String =
-        context.getString(when {
+    private fun label(context: Context, score: Int?, grund: String?, notiz: String?): String {
+        val base = context.getString(when {
             notiz != null -> R.string.squishy_notiz
             grund == "zurueckgenommen" -> R.string.squishy_zurueckgenommen
-            urteil == JA -> R.string.squishy_ja
-            urteil == SPAETER -> R.string.squishy_spaeter
+            grund == "spaeter" -> R.string.squishy_spaeter
+            score != null && score > 0 -> R.string.squishy_ja
             grund == "mag_nicht" -> R.string.squishy_mag_nicht
             grund == "falsche_version" -> R.string.squishy_falsche_version
             grund == "defekt" -> R.string.squishy_defekt
             else -> R.string.squishy_passt_nicht
         })
+        return if (score == null || score == 0) base
+        else base + " " + (if (score > 0) "+" else "−").repeat(kotlin.math.abs(score))
+    }
 
     private suspend fun buildEvent(
-        activity: MainActivity, item: MediaItem, listTitle: String?, urteil: String?,
+        activity: MainActivity, item: MediaItem, listTitle: String?, score: Int?,
         grund: String?, notiz: String?, quelle: String
     ): JSONObject {
+        val urteil = when {
+            score == null -> null
+            grund == "spaeter" -> SPAETER
+            score > 0 -> JA
+            score < 0 -> NEIN
+            else -> null
+        }
         val playlists = activity.reader.playlistListFlow.first()
             .filter { it.javaClass == Playlist::class.java }
         val list = if (listTitle == null) null else playlists.firstOrNull { it.title == listTitle }
@@ -242,7 +280,8 @@ object Feedback {
             put("titel", meta.title?.toString() ?: JSONObject.NULL)
             put("album", meta.albumTitle?.toString() ?: JSONObject.NULL)
             put("urteil", urteil ?: JSONObject.NULL)
-            put("grund", grund ?: JSONObject.NULL)
+            put("staerke", if (score == null || score == 0) JSONObject.NULL else kotlin.math.abs(score))
+            put("grund", (if (grund == "spaeter") null else grund) ?: JSONObject.NULL)
             put("notiz", notiz ?: JSONObject.NULL)
             put("quelle", quelle)
             put("app", BuildConfig.VERSION_NAME)

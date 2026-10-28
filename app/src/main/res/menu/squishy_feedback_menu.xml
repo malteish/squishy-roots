@@ -5,6 +5,7 @@
     <item android:id="@+id/squishy_falsche_version" android:title="@string/squishy_falsche_version" />
     <item android:id="@+id/squishy_defekt" android:title="@string/squishy_defekt" />
     <item android:id="@+id/squishy_spaeter" android:title="@string/squishy_spaeter" />
+    <item android:id="@+id/squishy_zuruecknehmen" android:title="@string/squishy_zuruecknehmen" />
     <item android:id="@+id/squishy_notiz" android:title="@string/squishy_notiz_menu" />
     <item android:id="@+id/squishy_einrichten" android:title="@string/squishy_einrichten" />
 </menu>

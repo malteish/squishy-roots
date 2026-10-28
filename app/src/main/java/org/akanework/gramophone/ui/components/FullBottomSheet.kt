@@ -79,6 +79,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.Log
 import androidx.media3.session.MediaBrowser
 import com.malteish.squishyroots.Feedback
+import com.malteish.squishyroots.PlaylistSituationIcons
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import androidx.preference.PreferenceManager
@@ -501,10 +502,10 @@ class FullBottomSheet
 
         bottomSheetFavoriteButton.addOnCheckedChangeListener(this)
 
-        for ((button, urteil) in listOf(squishyThumbUp to Feedback.JA, squishyThumbDown to Feedback.NEIN)) {
+        for ((button, up) in listOf(squishyThumbUp to true, squishyThumbDown to false)) {
             button.setOnClickListener {
                 ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.CONTEXT_CLICK)
-                Feedback.onThumb(activity, instance?.currentMediaItem, urteil) { updateThumbs() }
+                Feedback.onThumb(activity, instance?.currentMediaItem, up) { updateThumbs() }
             }
             button.setOnLongClickListener {
                 ViewCompat.performHapticFeedback(it, HapticFeedbackConstantsCompat.LONG_PRESS)
@@ -1469,11 +1470,9 @@ class FullBottomSheet
     }
 
     private fun updateThumbs() {
-        val urteil = Feedback.currentVerdict(instance?.currentMediaItem)
-        squishyThumbUp.setIconResource(if (urteil == Feedback.JA)
-            R.drawable.ic_squishy_thumb_up_filled else R.drawable.ic_squishy_thumb_up)
-        squishyThumbDown.setIconResource(if (urteil == Feedback.NEIN)
-            R.drawable.ic_squishy_thumb_down_filled else R.drawable.ic_squishy_thumb_down)
+        val score = Feedback.currentScore(instance?.currentMediaItem)
+        PlaylistSituationIcons.apply(squishyThumbUp, if (score > 0) score else 0, true)
+        PlaylistSituationIcons.apply(squishyThumbDown, if (score < 0) -score else 0, false)
     }
 
     override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {

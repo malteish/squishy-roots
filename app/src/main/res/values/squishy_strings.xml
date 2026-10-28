@@ -11,6 +11,7 @@
     <string name="squishy_notiz_menu">Notiz …</string>
     <string name="squishy_einrichten">Person und Ordner ändern …</string>
     <string name="squishy_zurueckgenommen">Zurückgenommen</string>
+    <string name="squishy_zuruecknehmen">Bewertung zurücknehmen</string>
     <string name="squishy_person">Wer hört? (z. B. malte)</string>
     <string name="squishy_ordner">Ordner für Feedback</string>
     <string name="squishy_ordner_hinweis">Bitte den Musikordner wählen, den Syncthing synchronisiert. Das Feedback landet dort unter feedback/.</string>

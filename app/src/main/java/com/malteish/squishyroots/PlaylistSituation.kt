@@ -9,6 +9,10 @@ package com.malteish.squishyroots
 import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -88,7 +92,7 @@ object PlaylistSituation {
         // Bewertungen im Player sollen die Markierung in der Liste sofort ändern.
         val prefs = Feedback.preferences(activity)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key?.startsWith(Feedback.VERDICT_PREFIX) == true)
+            if (key?.startsWith(Feedback.SCORE_PREFIX) == true)
                 songAdapter.notifyItemRangeChanged(0, songAdapter.itemCount)
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -184,8 +188,7 @@ object PlaylistSituation {
             val items = songAdapter.getSongList()
             if (pos == RecyclerView.NO_POSITION || pos >= items.size || title == null) return
             val item = items[pos]
-            val urteil = if (dx > 0) Feedback.JA else Feedback.NEIN
-            Feedback.onSwipe(activity, item, title, urteil) {
+            Feedback.onSwipe(activity, item, title, dx > 0) {
                 val p = songAdapter.getSongList().indexOfFirst { it.mediaId == item.mediaId }
                 if (p >= 0) songAdapter.notifyItemChanged(p)
             }
@@ -225,14 +228,17 @@ object PlaylistSituation {
     /** Anteil der Zeilenbreite, ab dem Wischen auslöst. */
     private const val TRIGGER = 0.3f
 
-    /** Markierung bewerteter Titel in Listen einer Situation. */
+    /** Markierung bewerteter Titel in Listen einer Situation: je stärker, desto größer. */
     fun decorate(subtitle: TextView, situation: String?, mediaId: String) {
         if (situation == null) return
-        val mark = when (Feedback.verdict(situation, mediaId)) {
-            Feedback.JA -> "👍 "
-            Feedback.NEIN -> "👎 "
-            else -> return
-        }
-        subtitle.text = mark + subtitle.text
+        val score = Feedback.score(situation, mediaId)
+        if (score == 0) return
+        val mark = SpannableString(if (score > 0) "👍" else "👎")
+        mark.setSpan(RelativeSizeSpan(LIST_SCALE[kotlin.math.abs(score) - 1]), 0, mark.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        subtitle.text = SpannableStringBuilder(mark).append(" ").append(subtitle.text)
     }
+
+    /** Schriftgröße der Markierung relativ zum Untertitel, für Stärke 1 bis 3. */
+    private val LIST_SCALE = floatArrayOf(0.75f, 1.1f, 1.45f)
 }

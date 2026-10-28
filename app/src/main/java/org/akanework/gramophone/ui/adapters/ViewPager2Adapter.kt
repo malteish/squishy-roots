@@ -128,7 +128,8 @@ class ViewPager2Adapter(
                             listOf() // this tab was removed
                         }
                 }.toMutableList()
-            else mutableListOf()
+            // Squishy Roots: ohne eigene Reihenfolge stehen die Playlists vorn.
+            else mutableListOf<Tab?>(Tab.Playlist)
             Tab.entries.forEach {
                 if (stList.indexOf(it) != stList.lastIndexOf(it))
                     stList.removeAll { i -> i == it }
