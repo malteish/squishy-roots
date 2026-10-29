@@ -63,5 +63,5 @@ jobs:
           TAG=v${{ inputs.version }}
           cp "$APK" "squishy-roots-$TAG.apk"
           gh release create "$TAG" "squishy-roots-$TAG.apk" \
-            --target "$GITHUB_SHA" --title "Squishy Roots $TAG" \
+            --target "$GITHUB_SHA" --title "Squishy $TAG" \
             --notes "$(git log -1 --format=%s)"

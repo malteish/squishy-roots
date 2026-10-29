@@ -421,7 +421,7 @@
     <string name="contributors_ghhccghk">Текст пісень у рядку стану та інші покращення</string>
     <string name="home_menu_quick_refresh">Швидке оновлення</string>
     <string name="add_to_queue">Додати до черги</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <string name="disabled">Відключено</string>
     <string name="offload_enabled_if_supported">Завжди ввімкнено</string>
     <string name="offload_enabled_if_gapless">Увімкнено, якщо можливе відтворення без пауз</string>

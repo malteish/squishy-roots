@@ -304,28 +304,13 @@ class PlaylistAdapter(
         ) {
             super.onBindViewHolder(holder, position, payloads)
             holder.createPlaylist.visibility = View.VISIBLE
-            holder.createPlaylist.setOnClickListener { _ ->
-                playlistNameDialog(context, R.string.create_playlist, "",
-                    { ItemManipulator.getDefaultPlaylistFile(it) }) { path ->
-                    ioScope.launch {
-                        try {
-                            val uri = ItemManipulator.createPlaylist(context, path)
-                            ItemManipulator.setPlaylistContent(context, uri,
-                                PlaylistSerializer.Playlist.create(), true)
-                        } catch (e: Exception) {
-                            Log.e("PlaylistAdapter", Log.getThrowableString(e)!!)
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(
-                                    context, context.getString(
-                                        R.string.create_failed_playlist,
-                                        e.javaClass.name + ": " + e.message
-                                    ),
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    }
-                }
+            // Squishy Roots: Playlists werden gewünscht, nicht auf dem Gerät angelegt.
+            holder.createPlaylist.contentDescription =
+                context.getString(R.string.squishy_wunsch)
+            androidx.appcompat.widget.TooltipCompat.setTooltipText(holder.createPlaylist,
+                context.getString(R.string.squishy_wunsch))
+            holder.createPlaylist.setOnClickListener {
+                com.malteish.squishyroots.Feedback.wishPlaylist(mainActivity, it)
             }
         }
 

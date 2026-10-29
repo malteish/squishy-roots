@@ -20,4 +20,14 @@
     <string name="squishy_daumen_hoch">Daumen hoch (lang drücken: mehr)</string>
     <string name="squishy_stoebern">Stöbern: %1$d Vorschläge</string>
     <string name="squishy_daumen_runter">Daumen runter (lang drücken: mehr)</string>
+    <string name="squishy_pl_ja">Playlist gefällt mir</string>
+    <string name="squishy_pl_nein">Playlist gefällt mir nicht</string>
+    <string name="squishy_pl_notiz">Notiz zur Playlist …</string>
+    <string name="squishy_pl_daumen_hoch">Playlist gefällt mir (lang drücken: mehr)</string>
+    <string name="squishy_pl_daumen_runter">Playlist gefällt mir nicht (lang drücken: mehr)</string>
+    <string name="squishy_wunsch">Neue Playlist wünschen</string>
+    <string name="squishy_wunsch_titel">Neue Playlist wünschen</string>
+    <string name="squishy_wunsch_hinweis">Claude legt sie beim nächsten Abgleich an.</string>
+    <string name="squishy_wunsch_name">Name</string>
+    <string name="squishy_wunsch_beschreibung">Wofür oder wie soll sie klingen?</string>
 </resources>

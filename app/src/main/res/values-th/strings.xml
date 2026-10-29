@@ -207,7 +207,7 @@
     <string name="list">รายการ</string>
     <string name="dialog_disc_number">แผ่นที่</string>
     <string name="settings_experimental_settings_summary">ฟีเจอร์ทดสอบและอื่นๆ</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <plurals name="folders_plural">
         <item quantity="other">%d แฟ้ม</item>
     </plurals>

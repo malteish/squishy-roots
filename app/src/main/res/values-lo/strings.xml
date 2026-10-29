@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <string name="home_menu_search">ຊອກຫາ</string>
     <string name="home_menu_settings">ການຕັ້ງຄ່າ</string>
     <string name="home_menu_shuffle">ສຸ່ມທັງໝົດ</string>

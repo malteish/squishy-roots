@@ -16,6 +16,7 @@ import android.text.InputType
 import android.view.View
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
@@ -27,12 +28,15 @@ import androidx.media3.common.MediaItem
 import androidx.preference.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.getFile
+import org.akanework.gramophone.logic.gramophoneApplication
 import org.akanework.gramophone.ui.MainActivity
 import org.json.JSONObject
 import uk.akane.libphonograph.items.Playlist
@@ -227,25 +231,197 @@ object Feedback {
         grund: String?, notiz: String?, quelle: String, onDone: () -> Unit
     ) {
         init(activity)
+        submit(activity, situationOf(listTitle), item.mediaId, score, onDone,
+            { buildEvent(activity, item, listTitle, score, grund, notiz, quelle) },
+            { applyListChange(activity, item, listTitle, score, grund) })
+    }
+
+    /**
+     * Gemeinsamer Weg für jedes Ereignis: Bewertung sofort merken (sofern [score] gesetzt),
+     * Zeile ans Log hängen, danach [afterLog]. Schlägt eines davon fehl, wird die Bewertung
+     * zurückgesetzt und der Fehler gemeldet.
+     */
+    private fun submit(
+        activity: MainActivity, situation: String?, mediaId: String, score: Int?,
+        onDone: () -> Unit, build: suspend () -> JSONObject, afterLog: suspend () -> Unit = {}
+    ) {
+        init(activity)
         setup(activity, force = false) {
             // Sofort merken: Mehrmals schnell tippen muss auf dem neuen Stand aufbauen.
-            val key = situationOf(listTitle)
-            val previous = score(key, item.mediaId)
-            if (score != null) storeScore(key, item.mediaId, score)
+            val previous = score(situation, mediaId)
+            if (score != null) storeScore(situation, mediaId, score)
             onDone()
             activity.lifecycleScope.launch {
-                val event = buildEvent(activity, item, listTitle, score, grund, notiz, quelle)
                 val error = withContext(Dispatchers.IO) {
-                    runCatching { append(activity.contentResolver, event) }.exceptionOrNull()
+                    runCatching {
+                        append(activity.contentResolver, build())
+                        afterLog()
+                    }.exceptionOrNull()
                 }
                 if (error != null) {
-                    if (score != null) storeScore(key, item.mediaId, previous)
+                    if (score != null) storeScore(situation, mediaId, previous)
                     onDone()
                     Toast.makeText(activity, activity.getString(R.string.squishy_fehler,
                         error.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
+    }
+
+    /**
+     * Ablehnung („passt nicht“, „mag ich gar nicht“) nimmt den Titel sofort aus der angezeigten
+     * Liste, Zustimmung in `x-kandidaten` verschiebt ihn in die Playlist `x`. Defekt, falsche
+     * Version und später lassen die Liste unverändert, weil der Titel dort bleiben soll.
+     */
+    private suspend fun applyListChange(
+        activity: MainActivity, item: MediaItem, listTitle: String?, score: Int?, grund: String?
+    ) {
+        if (listTitle == null || score == null) return
+        val candidates = listTitle.endsWith(CANDIDATE_SUFFIX)
+        val remove = score < 0 && (grund == "passt_nicht" || grund == "mag_nicht")
+        val promote = score > 0 && candidates
+        if (!remove && !promote) return
+        val itemPath = item.getFile()?.path ?: return
+        val playlists = activity.reader.playlistListFlow.first()
+            .filter { it.javaClass == Playlist::class.java }
+        val from = playlists.firstOrNull { it.title == listTitle }?.path ?: return
+        val to = if (promote) playlists.firstOrNull { it.title == situationOf(listTitle) }?.path else null
+        if (promote && to == null) return
+        val tree = Uri.parse(prefs!!.getString(KEY_TREE, null)!!)
+        val changed = if (to != null)
+            PlaylistFiles.move(activity.contentResolver, tree, from.name, to.name,
+                from.parent ?: "", itemPath)
+        else PlaylistFiles.remove(activity.contentResolver, tree, from.name, from.parent ?: "", itemPath)
+        if (changed) refreshLater(activity)
+    }
+
+    private var refreshJob: Job? = null
+
+    /** Liest die Playlists neu ein, gebündelt, wenn mehrere Titel schnell hintereinander wegfallen. */
+    private fun refreshLater(activity: MainActivity) {
+        refreshJob?.cancel()
+        refreshJob = activity.lifecycleScope.launch {
+            delay(REFRESH_DELAY_MS)
+            withContext(Dispatchers.Default) { activity.gramophoneApplication.reader.refresh() }
+        }
+    }
+
+    private const val REFRESH_DELAY_MS = 1000L
+
+    /** Schlüssel für die Bewertung der ganzen Playlist, getrennt von den Titeln. */
+    const val PLAYLIST_ITEM = "#playlist"
+
+    fun playlistScore(situation: String?): Int = score(situation, PLAYLIST_ITEM)
+
+    /** Daumen an der Playlist als Ganzes: ein Tipp verändert die Bewertung um eine Stufe. */
+    fun onPlaylistThumb(
+        activity: MainActivity, button: View, situation: String, up: Boolean, onDone: () -> Unit
+    ) {
+        val next = step(playlistScore(situation), up)
+        Burst.play(activity, button, up, kotlin.math.abs(next))
+        recordPlaylist(activity, situation, next, if (next < 0) "passt_nicht" else null, null,
+            onDone)
+    }
+
+    fun showPlaylistMenu(activity: MainActivity, anchor: View, situation: String, onDone: () -> Unit) {
+        val menu = PopupMenu(activity, anchor)
+        menu.menuInflater.inflate(R.menu.squishy_playlist_menu, menu.menu)
+        menu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                R.id.squishy_pl_ja -> onPlaylistThumb(activity, anchor, situation, true, onDone)
+                R.id.squishy_pl_nein -> onPlaylistThumb(activity, anchor, situation, false, onDone)
+                R.id.squishy_pl_zuruecknehmen ->
+                    recordPlaylist(activity, situation, 0, "zurueckgenommen", null, onDone)
+                R.id.squishy_pl_notiz -> askText(activity, R.string.squishy_notiz, null) { text ->
+                    recordPlaylist(activity, situation, null, null, text, onDone)
+                }
+                else -> return@setOnMenuItemClickListener false
+            }
+            true
+        }
+        menu.show()
+    }
+
+    private fun recordPlaylist(
+        activity: MainActivity, situation: String, score: Int?, grund: String?, notiz: String?,
+        onDone: () -> Unit
+    ) {
+        submit(activity, situation, PLAYLIST_ITEM, score, onDone, {
+            JSONObject().apply {
+                put("zeit", now())
+                put("person", prefs!!.getString(KEY_PERSON, null))
+                put("ziel", "playlist")
+                put("playlist", situation)
+                put("beschreibung", descriptionOf(activity, situation) ?: JSONObject.NULL)
+                put("urteil", when {
+                    score == null -> JSONObject.NULL
+                    score > 0 -> JA
+                    score < 0 -> NEIN
+                    else -> JSONObject.NULL
+                })
+                put("staerke", if (score == null || score == 0) JSONObject.NULL else kotlin.math.abs(score))
+                put("grund", grund ?: JSONObject.NULL)
+                put("notiz", notiz ?: JSONObject.NULL)
+                put("quelle", "kopf")
+                put("app", BuildConfig.VERSION_NAME)
+            }
+        })
+    }
+
+    /** Wunsch nach einer neuen Playlist: Name und Beschreibung, damit Claude sie anlegen kann. */
+    fun wishPlaylist(activity: MainActivity, anchor: View) {
+        val name = EditText(activity).apply {
+            hint = activity.getString(R.string.squishy_wunsch_name)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        val description = EditText(activity).apply {
+            hint = activity.getString(R.string.squishy_wunsch_beschreibung)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 3
+        }
+        val pad = (24 * activity.resources.displayMetrics.density).toInt()
+        val container = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(name)
+            addView(description)
+        }
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.squishy_wunsch_titel)
+            .setMessage(R.string.squishy_wunsch_hinweis)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val wishName = name.text.toString().trim()
+                if (wishName.isEmpty()) return@setPositiveButton
+                Burst.play(activity, anchor, true, 1)
+                submit(activity, null, "", null, {}, {
+                    JSONObject().apply {
+                        put("zeit", now())
+                        put("person", prefs!!.getString(KEY_PERSON, null))
+                        put("ziel", "wunsch")
+                        put("art", "neue_playlist")
+                        put("name", wishName)
+                        put("beschreibung", description.text.toString().trim().ifEmpty { null }
+                            ?: JSONObject.NULL)
+                        put("quelle", "liste")
+                        put("app", BuildConfig.VERSION_NAME)
+                    }
+                })
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+        name.requestFocus()
+    }
+
+    private fun now() = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+
+    private suspend fun descriptionOf(activity: MainActivity, situation: String): String? {
+        val playlists = activity.reader.playlistListFlow.first()
+            .filter { it.javaClass == Playlist::class.java }
+        val file = (playlists.firstOrNull { it.title == situation }
+            ?: playlists.firstOrNull { it.title == situation + CANDIDATE_SUFFIX })?.path
+        return withContext(Dispatchers.IO) { file?.let { readDescription(it) } }
     }
 
     private fun storeScore(situation: String?, mediaId: String, score: Int) {
@@ -278,8 +454,9 @@ object Feedback {
         }
         val meta = item.mediaMetadata
         return JSONObject().apply {
-            put("zeit", OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+            put("zeit", now())
             put("person", prefs!!.getString(KEY_PERSON, null))
+            put("ziel", "titel")
             put("playlist", situation ?: JSONObject.NULL)
             put("liste", list?.title ?: JSONObject.NULL)
             put("beschreibung", beschreibung ?: JSONObject.NULL)
@@ -319,14 +496,7 @@ object Feedback {
     private fun findOrCreate(
         resolver: ContentResolver, tree: Uri, parentId: String, name: String, mime: String
     ): Uri {
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
-        resolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use {
-            while (it.moveToNext()) {
-                if (it.getString(1) == name)
-                    return DocumentsContract.buildDocumentUriUsingTree(tree, it.getString(0))
-            }
-        }
+        PlaylistFiles.find(resolver, tree, parentId, name)?.let { return it }
         return DocumentsContract.createDocument(resolver,
             DocumentsContract.buildDocumentUriUsingTree(tree, parentId), mime, name)
             ?: throw IllegalStateException("$name konnte nicht angelegt werden")

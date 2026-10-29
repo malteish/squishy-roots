@@ -357,7 +357,7 @@
     <string name="spk_encoding_aac_adts_lc">AAC-LC en ADTS</string>
     <string name="send_email">Enviar un correo</string>
     <string name="settings_contributors_click">%s (¡clic para más!)</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <plurals name="folders_plural">
         <item quantity="one">%d Carpeta</item>
         <item quantity="many">%d Carpetas</item>

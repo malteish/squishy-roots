@@ -318,7 +318,7 @@
     <string name="cannot_play_file">Não é possível abrir este arquivo</string>
     <string name="device_type_ble_headset">Headset Bluetooth LE</string>
     <string name="settings_open_source_licenses">Licenças de código aberto</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <plurals name="folders_plural">
         <item quantity="one">%d Pasta</item>
         <item quantity="many">%d Pastas</item>

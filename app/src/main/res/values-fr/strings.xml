@@ -302,7 +302,7 @@
     <string name="spk_encoding_amr_nb">AMR-NB</string>
     <string name="spk_encoding_evrc">EVRC</string>
     <string name="spk_encoding_evrcb">EVRC-B</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <plurals name="folders_plural">
         <item quantity="one">%d dossier</item>
         <item quantity="many">%d dossiers</item>

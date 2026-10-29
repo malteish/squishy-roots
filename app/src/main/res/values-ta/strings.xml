@@ -411,7 +411,7 @@
     <string name="contributors_code_contributions">குறியீடு பங்களிப்புகள்</string>
     <string name="contributors_yuyuko1024">மோசமான முன்னேற்றப் பட்டி</string>
     <string name="contributors_ghhccghk">ச்டேட்டச் பார் பாடல் வரிகள் மற்றும் பிற மேம்பாடுகள்</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <plurals name="folders_plural">
         <item quantity="one">%d கோப்புறை</item>
         <item quantity="other">%d கோப்புறைகள்</item>

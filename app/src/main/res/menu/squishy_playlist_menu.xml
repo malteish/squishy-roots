@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/squishy_pl_ja" android:title="@string/squishy_pl_ja" />
+    <item android:id="@+id/squishy_pl_nein" android:title="@string/squishy_pl_nein" />
+    <item android:id="@+id/squishy_pl_zuruecknehmen" android:title="@string/squishy_zuruecknehmen" />
+    <item android:id="@+id/squishy_pl_notiz" android:title="@string/squishy_pl_notiz" />
+</menu>

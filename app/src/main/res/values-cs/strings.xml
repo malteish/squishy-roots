@@ -281,7 +281,7 @@
     <string name="spk_encoding_pcm_32bit">32bitový (int) PCM</string>
     <string name="spk_channel_out_9point1point4">9.1.4</string>
     <string name="spk_channel_invalid">Neplatné</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <string name="timer_expiry_end_of_this_song">Časovač spánku zastaví hudbu na konci této skladby</string>
     <string name="settings_open_source_licenses">Open source licence</string>
     <string name="oh_no">Ach ne!</string>

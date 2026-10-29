@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Squishy Roots: Kopf einer Playlist mit Beschreibung und Zugang zu den Vorschlägen. -->
+<!-- Squishy Roots: Kopf einer Playlist mit Beschreibung, Bewertung der ganzen Playlist und Zugang zu den Vorschlägen. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -16,11 +17,57 @@
         android:textAppearance="?attr/textAppearanceBodyMedium"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/squishy_stoebern"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:id="@+id/squishy_kopf_zeile"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp" />
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/squishy_pl_thumb_up"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/rp_buttons"
+            android:contentDescription="@string/squishy_pl_daumen_hoch"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:saveEnabled="false"
+            app:icon="@drawable/ic_squishy_thumb_up"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorOnSurface"
+            app:tooltipText="@string/squishy_pl_daumen_hoch" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/squishy_pl_thumb_down"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/rp_buttons"
+            android:contentDescription="@string/squishy_pl_daumen_runter"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:saveEnabled="false"
+            app:icon="@drawable/ic_squishy_thumb_down"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorOnSurface"
+            app:tooltipText="@string/squishy_pl_daumen_runter" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/squishy_stoebern"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp" />
+
+    </LinearLayout>
 
 </LinearLayout>

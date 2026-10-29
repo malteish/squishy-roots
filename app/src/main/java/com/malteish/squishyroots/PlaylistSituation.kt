@@ -84,7 +84,7 @@ object PlaylistSituation {
                     }
                     // Kommt der Kopf erst nach dem ersten Layout, bliebe er oberhalb des Sichtbaren.
                     val atTop = !recyclerView.canScrollVertically(-1)
-                    header.update(description, candidates)
+                    header.update(description, candidates, title?.takeUnless { it.endsWith(Feedback.CANDIDATE_SUFFIX) })
                     if (atTop) recyclerView.scrollToPosition(0)
                 }
         }
@@ -93,8 +93,10 @@ object PlaylistSituation {
         // Bewertungen im Player sollen die Markierung in der Liste sofort ändern.
         val prefs = Feedback.preferences(activity)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key?.startsWith(Feedback.SCORE_PREFIX) == true)
+            if (key?.startsWith(Feedback.SCORE_PREFIX) == true) {
                 songAdapter.notifyItemRangeChanged(0, songAdapter.itemCount)
+                header.refresh()
+            }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         fragment.viewLifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -109,15 +111,26 @@ object PlaylistSituation {
         private var description: String? = null
         private var candidates: Playlist? = null
 
+        /** Situation, die der Kopf als Ganzes bewertet. null in der Vorschlagsliste. */
+        private var situation: String? = null
+
         class Holder(view: View) : RecyclerView.ViewHolder(view) {
             val description: TextView = view.findViewById(R.id.squishy_beschreibung)
+            val row: View = view.findViewById(R.id.squishy_kopf_zeile)
             val browse: MaterialButton = view.findViewById(R.id.squishy_stoebern)
+            val thumbUp: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_up)
+            val thumbDown: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_down)
         }
 
-        fun update(description: String?, candidates: Playlist?) {
+        fun refresh() {
+            if (itemCount == 1) notifyItemChanged(0)
+        }
+
+        fun update(description: String?, candidates: Playlist?, situation: String?) {
             val wasShown = itemCount == 1
             this.description = description
             this.candidates = candidates
+            this.situation = situation
             val shown = itemCount == 1
             when {
                 wasShown && shown -> notifyItemChanged(0)
@@ -126,7 +139,8 @@ object PlaylistSituation {
             }
         }
 
-        override fun getItemCount() = if (description != null || candidates != null) 1 else 0
+        override fun getItemCount() =
+            if (description != null || candidates != null || situation != null) 1 else 0
 
         override fun getItemViewType(position: Int) = R.layout.squishy_situation_header
 
@@ -138,6 +152,24 @@ object PlaylistSituation {
             holder.description.isVisible = description != null
             holder.description.text = description
             val c = candidates
+            val sit = situation
+            holder.row.isVisible = c != null || sit != null
+            holder.thumbUp.isVisible = sit != null
+            holder.thumbDown.isVisible = sit != null
+            if (sit != null) {
+                val score = Feedback.playlistScore(sit)
+                PlaylistSituationIcons.apply(holder.thumbUp, if (score > 0) score else 0, true)
+                PlaylistSituationIcons.apply(holder.thumbDown, if (score < 0) -score else 0, false)
+                for ((button, up) in listOf(holder.thumbUp to true, holder.thumbDown to false)) {
+                    button.setOnClickListener {
+                        Feedback.onPlaylistThumb(activity, it, sit, up) { refresh() }
+                    }
+                    button.setOnLongClickListener {
+                        Feedback.showPlaylistMenu(activity, it, sit) { refresh() }
+                        true
+                    }
+                }
+            }
             holder.browse.isVisible = c != null
             if (c != null) {
                 holder.browse.text = activity.getString(R.string.squishy_stoebern, c.songList.size)

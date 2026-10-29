@@ -284,7 +284,7 @@
     </plurals>
     <string name="timer_expiry_eos">Pengatur waktu tidur akan menjeda musik saat lagu yang diputar pada %s selesai</string>
     <string name="timer_expiry_end_of_this_song">Pengatur waktu tidur akan menjeda musik di akhir lagu ini</string>
-    <string name="app_name">Squishy Roots</string>
+    <string name="app_name">Squishy</string>
     <string name="playback_speed">Kecepatan pemutaran</string>
     <string name="tempo">Tempo</string>
     <string name="pitch">Nada</string>
