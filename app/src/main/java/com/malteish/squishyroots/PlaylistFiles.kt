@@ -1,5 +1,5 @@
 /*
- *     Squishy Roots: Titel direkt aus M3U-Dateien nehmen oder dorthin verschieben.
+ *     Squishy Roots: Titel direkt zwischen M3U-Dateien verschieben.
  *
  *     Licensed under the GNU General Public License v3 or later, like Gramophone.
  */
@@ -23,27 +23,22 @@ object PlaylistFiles {
 
     private class Doc(val uri: Uri, val blocks: List<Block>, val eol: String)
 
-    /** Nimmt [itemPath] aus der Liste [name]. true, wenn er darin stand. */
-    fun remove(resolver: ContentResolver, tree: Uri, name: String, dir: String, itemPath: String): Boolean {
-        val doc = read(resolver, tree, name) ?: return false
-        val rest = doc.blocks.filterNot { matches(it, itemPath, dir) }
-        if (rest.size == doc.blocks.size) return false
-        write(resolver, doc, rest)
-        return true
-    }
-
     /**
      * Verschiebt [itemPath] von der Liste [from] in die Liste [to], falls dort noch nicht
      * vorhanden. Zuerst wird [to] geschrieben, damit bei einem Fehler nichts verloren geht.
-     * false, wenn [to] fehlt oder der Titel nicht in [from] stand.
+     * Fehlt [to] und ist [create] gesetzt, wird sie neben [from] angelegt.
+     * false, wenn [to] fehlt (und nicht angelegt wird) oder der Titel nicht in [from] stand.
      */
     fun move(
-        resolver: ContentResolver, tree: Uri, from: String, to: String, dir: String, itemPath: String
+        resolver: ContentResolver, tree: Uri, from: String, to: String, dir: String, itemPath: String,
+        create: Boolean = false
     ): Boolean {
         val source = read(resolver, tree, from) ?: return false
-        val target = read(resolver, tree, to) ?: return false
         val moved = source.blocks.filter { matches(it, itemPath, dir) }
         if (moved.isEmpty()) return false
+        val target = read(resolver, tree, to)
+            ?: (if (create) createEmpty(resolver, tree, to, source.eol) else null)
+            ?: return false
         if (target.blocks.none { matches(it, itemPath, dir) })
             write(resolver, target, target.blocks + moved.take(1))
         write(resolver, source, source.blocks.filterNot { matches(it, itemPath, dir) })
@@ -56,6 +51,20 @@ object PlaylistFiles {
         val p = nfc(itemPath)
         if (t.startsWith("/")) return t == p
         return p == nfc(dir).trimEnd('/') + "/" + t || p.endsWith("/$t")
+    }
+
+    /**
+     * Legt eine leere M3U [name] direkt im freigegebenen Ordner an. Als Typ octet-stream, damit
+     * der Anbieter den Namen samt Endung unverändert lässt.
+     */
+    private fun createEmpty(resolver: ContentResolver, tree: Uri, name: String, eol: String): Doc? {
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree,
+            DocumentsContract.getTreeDocumentId(tree))
+        val uri = DocumentsContract.createDocument(resolver, parent, "application/octet-stream", name)
+            ?: return null
+        val doc = Doc(uri, listOf(Block(listOf("#EXTM3U"), null)), eol)
+        write(resolver, doc, doc.blocks)
+        return doc
     }
 
     private fun nfc(s: String) = Normalizer.normalize(s, Normalizer.Form.NFC)

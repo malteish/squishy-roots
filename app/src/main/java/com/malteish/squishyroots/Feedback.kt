@@ -10,6 +10,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.text.InputType
@@ -49,9 +50,10 @@ import java.time.format.DateTimeFormatter
  * Ordner (die per Syncthing synchronisierte Selektion). Die Datei wird nur angehängt.
  *
  * Kontext eines Ereignisses: Situation (Playlist-Name), Beschreibung (aus der Kopfzeile
- * `#DESCRIPTION:` der M3U), Person und Zeit. Eine Liste `<name>-kandidaten` gehört zur Situation
- * `<name>`. Im Player ist die Liste die Warteschlange, aus der zuletzt gestartet wurde, beim
- * Wischen die angezeigte Playlist. Sie zählt nur, wenn der Titel in ihr steht.
+ * `#DESCRIPTION:` der M3U), Person und Zeit. Die Listen `<name>-kandidaten` und
+ * `<name>-abgelehnt` gehören zur Situation `<name>`. Im Player ist die Liste die Warteschlange,
+ * aus der zuletzt gestartet wurde, beim Wischen die angezeigte Playlist. Sie zählt nur, wenn der
+ * Titel in ihr steht.
  */
 object Feedback {
     const val JA = "ja"
@@ -63,9 +65,15 @@ object Feedback {
     private const val KEY_QUEUE = "squishy_queue"
     private const val DESCRIPTION_PREFIX = "#DESCRIPTION:"
     const val CANDIDATE_SUFFIX = "-kandidaten"
+    const val REJECTED_SUFFIX = "-abgelehnt"
 
-    /** Situation einer Liste: `x-kandidaten` gehört zu `x`. */
-    fun situationOf(listTitle: String?): String? = listTitle?.removeSuffix(CANDIDATE_SUFFIX)
+    /** Situation einer Liste: `x-kandidaten` und `x-abgelehnt` gehören zu `x`. */
+    fun situationOf(listTitle: String?): String? =
+        listTitle?.removeSuffix(CANDIDATE_SUFFIX)?.removeSuffix(REJECTED_SUFFIX)
+
+    /** Vorschläge oder Abgelehnte einer Situation, keine eigene Situation. */
+    fun isSubList(listTitle: String?): Boolean = listTitle != null &&
+            (listTitle.endsWith(CANDIDATE_SUFFIX) || listTitle.endsWith(REJECTED_SUFFIX))
 
     private var prefs: SharedPreferences? = null
     private var queueTitle: String? = null
@@ -269,30 +277,39 @@ object Feedback {
     }
 
     /**
-     * Ablehnung („passt nicht“, „mag ich gar nicht“) nimmt den Titel sofort aus der angezeigten
-     * Liste, Zustimmung in `x-kandidaten` verschiebt ihn in die Playlist `x`. Defekt, falsche
+     * Ablehnung („passt nicht“, „mag ich gar nicht“) verschiebt den Titel sofort aus der
+     * angezeigten Liste nach `x-abgelehnt` (wird bei Bedarf angelegt). Zustimmung in
+     * `x-kandidaten` oder `x-abgelehnt` verschiebt ihn in die Playlist `x`. Defekt, falsche
      * Version und später lassen die Liste unverändert, weil der Titel dort bleiben soll.
      */
     private suspend fun applyListChange(
         activity: MainActivity, item: MediaItem, listTitle: String?, score: Int?, grund: String?
     ) {
         if (listTitle == null || score == null) return
-        val candidates = listTitle.endsWith(CANDIDATE_SUFFIX)
-        val remove = score < 0 && (grund == "passt_nicht" || grund == "mag_nicht")
-        val promote = score > 0 && candidates
-        if (!remove && !promote) return
+        val situation = situationOf(listTitle) ?: return
+        val rejectedTitle = situation + REJECTED_SUFFIX
+        val reject = score < 0 && (grund == "passt_nicht" || grund == "mag_nicht") &&
+                listTitle != rejectedTitle
+        val promote = score > 0 && isSubList(listTitle)
+        if (!reject && !promote) return
         val itemPath = item.getFile()?.path ?: return
         val playlists = activity.reader.playlistListFlow.first()
             .filter { it.javaClass == Playlist::class.java }
         val from = playlists.firstOrNull { it.title == listTitle }?.path ?: return
-        val to = if (promote) playlists.firstOrNull { it.title == situationOf(listTitle) }?.path else null
-        if (promote && to == null) return
+        val toName = if (promote) playlists.firstOrNull { it.title == situation }?.path?.name ?: return
+        else playlists.firstOrNull { it.title == rejectedTitle }?.path?.name
+            ?: "$rejectedTitle.${from.extension}"
+        val known = playlists.any { it.path?.name == toName }
         val tree = Uri.parse(prefs!!.getString(KEY_TREE, null)!!)
-        val changed = if (to != null)
-            PlaylistFiles.move(activity.contentResolver, tree, from.name, to.name,
-                from.parent ?: "", itemPath)
-        else PlaylistFiles.remove(activity.contentResolver, tree, from.name, from.parent ?: "", itemPath)
-        if (changed) refreshLater(activity)
+        val changed = PlaylistFiles.move(activity.contentResolver, tree, from.name, toName,
+            from.parent ?: "", itemPath, create = reject)
+        if (!changed) return
+        // Eine neu angelegte Liste kennt die Mediathek erst nach dem Scan.
+        if (known) refreshLater(activity)
+        else MediaScannerConnection.scanFile(activity.applicationContext,
+            arrayOf(File(from.parentFile, toName).path), null) { _, _ ->
+            activity.runOnUiThread { refreshLater(activity) }
+        }
     }
 
     private var refreshJob: Job? = null

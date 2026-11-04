@@ -39,20 +39,21 @@ import org.akanework.gramophone.ui.fragments.GeneralSubFragment
 import uk.akane.libphonograph.items.Playlist
 
 /**
- * Eine Playlist `x` ist eine Situation. Ihre Vorschläge liegen in `x-kandidaten` und sind in der
- * Übersicht ausgeblendet, solange es `x` gibt. Erreichbar sind sie über „Stöbern“ im Kopf von `x`.
+ * Eine Playlist `x` ist eine Situation. Ihre Vorschläge liegen in `x-kandidaten`, abgelehnte Titel
+ * in `x-abgelehnt`. Beide sind in der Übersicht ausgeblendet, solange es `x` gibt. Erreichbar sind
+ * sie über „Stöbern“ und „Abgelehnt“ im Kopf von `x`.
  */
 object PlaylistSituation {
 
     /** Adapter, deren Zeilen im Gitter die volle Breite einnehmen (CustomGridLayoutManager). */
     interface FullSpan
 
-    /** Für die Playlist-Übersicht: Vorschlagslisten ausblenden, deren Situation existiert. */
-    fun hideCandidateLists(playlists: List<Playlist>): List<Playlist> {
+    /** Für die Playlist-Übersicht: Vorschläge und Abgelehnte ausblenden, deren Situation existiert. */
+    fun hideSubLists(playlists: List<Playlist>): List<Playlist> {
         val titles = playlists.mapNotNull { it.title }.toSet()
         return playlists.filter { pl ->
             val t = pl.title
-            t == null || !t.endsWith(Feedback.CANDIDATE_SUFFIX) || Feedback.situationOf(t) !in titles
+            !Feedback.isSubList(t) || Feedback.situationOf(t) !in titles
         }
     }
 
@@ -72,8 +73,10 @@ object PlaylistSituation {
                     songAdapter.squishyListTitle = title
                     val situation = Feedback.situationOf(title)
                     val parent = all.firstOrNull { it.title == situation }
-                    val candidates = if (title == null || title.endsWith(Feedback.CANDIDATE_SUFFIX)) null
+                    val candidates = if (title == null || Feedback.isSubList(title)) null
                     else all.firstOrNull { it.title == title + Feedback.CANDIDATE_SUFFIX }
+                    val rejected = if (title == null || Feedback.isSubList(title)) null
+                    else all.firstOrNull { it.title == title + Feedback.REJECTED_SUFFIX }
                     val description = withContext(Dispatchers.IO) {
                         pl?.path?.let { Feedback.readDescription(it) }
                             ?: parent?.path?.let { Feedback.readDescription(it) }
@@ -84,7 +87,8 @@ object PlaylistSituation {
                     }
                     // Kommt der Kopf erst nach dem ersten Layout, bliebe er oberhalb des Sichtbaren.
                     val atTop = !recyclerView.canScrollVertically(-1)
-                    header.update(description, candidates, title?.takeUnless { it.endsWith(Feedback.CANDIDATE_SUFFIX) })
+                    header.update(description, candidates, rejected,
+                        title?.takeUnless { Feedback.isSubList(it) })
                     if (atTop) recyclerView.scrollToPosition(0)
                 }
         }
@@ -110,6 +114,7 @@ object PlaylistSituation {
         RecyclerView.Adapter<HeaderAdapter.Holder>(), FullSpan {
         private var description: String? = null
         private var candidates: Playlist? = null
+        private var rejected: Playlist? = null
 
         /** Situation, die der Kopf als Ganzes bewertet. null in der Vorschlagsliste. */
         private var situation: String? = null
@@ -118,6 +123,7 @@ object PlaylistSituation {
             val description: TextView = view.findViewById(R.id.squishy_beschreibung)
             val row: View = view.findViewById(R.id.squishy_kopf_zeile)
             val browse: MaterialButton = view.findViewById(R.id.squishy_stoebern)
+            val rejected: MaterialButton = view.findViewById(R.id.squishy_abgelehnt)
             val thumbUp: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_up)
             val thumbDown: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_down)
         }
@@ -126,10 +132,11 @@ object PlaylistSituation {
             if (itemCount == 1) notifyItemChanged(0)
         }
 
-        fun update(description: String?, candidates: Playlist?, situation: String?) {
+        fun update(description: String?, candidates: Playlist?, rejected: Playlist?, situation: String?) {
             val wasShown = itemCount == 1
             this.description = description
             this.candidates = candidates
+            this.rejected = rejected
             this.situation = situation
             val shown = itemCount == 1
             when {
@@ -140,7 +147,7 @@ object PlaylistSituation {
         }
 
         override fun getItemCount() =
-            if (description != null || candidates != null || situation != null) 1 else 0
+            if (description != null || candidates != null || rejected != null || situation != null) 1 else 0
 
         override fun getItemViewType(position: Int) = R.layout.squishy_situation_header
 
@@ -153,6 +160,7 @@ object PlaylistSituation {
             holder.description.text = description
             val c = candidates
             val sit = situation
+            val r = rejected
             holder.row.isVisible = c != null || sit != null
             holder.thumbUp.isVisible = sit != null
             holder.thumbDown.isVisible = sit != null
@@ -173,13 +181,20 @@ object PlaylistSituation {
             holder.browse.isVisible = c != null
             if (c != null) {
                 holder.browse.text = activity.getString(R.string.squishy_stoebern, c.songList.size)
-                holder.browse.setOnClickListener {
-                    activity.startFragment(GeneralSubFragment()) {
-                        putString("Class", c.javaClass.name)
-                        putString("Id", c.id?.toString())
-                        putInt("Item", R.id.playlist)
-                    }
-                }
+                holder.browse.setOnClickListener { open(c) }
+            }
+            holder.rejected.isVisible = r != null && r.songList.isNotEmpty()
+            if (r != null) {
+                holder.rejected.text = activity.getString(R.string.squishy_abgelehnt, r.songList.size)
+                holder.rejected.setOnClickListener { open(r) }
+            }
+        }
+
+        private fun open(list: Playlist) {
+            activity.startFragment(GeneralSubFragment()) {
+                putString("Class", list.javaClass.name)
+                putString("Id", list.id?.toString())
+                putInt("Item", R.id.playlist)
             }
         }
     }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Squishy Roots: Kopf einer Playlist mit Beschreibung, Bewertung der ganzen Playlist und Zugang zu den Vorschlägen. -->
+<!-- Squishy Roots: Kopf einer Playlist mit Beschreibung, Bewertung der ganzen Playlist und Zugang zu Vorschlägen und Abgelehnten. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -69,5 +69,12 @@
             android:layout_marginStart="12dp" />
 
     </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/squishy_abgelehnt"
+        style="?attr/borderlessButtonStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" />
 
 </LinearLayout>

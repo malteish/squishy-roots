@@ -77,7 +77,7 @@ class PlaylistAdapter(
                 it.map { playlistsList ->
                     playlistsList.filter { p -> p.id != null && p.path != null }
                 }
-            else it.map { com.malteish.squishyroots.PlaylistSituation.hideCandidateLists(it) }
+            else it.map { com.malteish.squishyroots.PlaylistSituation.hideSubLists(it) }
         },
     sortHelper = StorePlaylistHelper,
     naturalOrderHelper = null,
