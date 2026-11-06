@@ -22,6 +22,13 @@
     <string name="squishy_rueck_papierkorb">↶ Im Papierkorb · tippen: Rückgängig</string>
     <string name="squishy_rueck_uebernommen">↶ In die Playlist übernommen · tippen: Rückgängig</string>
     <string name="squishy_rueck_zurueckgelegt">↶ Zurückgelegt · tippen: Rückgängig</string>
+    <string name="squishy_leeren">Papierkorb leeren …</string>
+    <string name="squishy_leeren_titel">Papierkorb leeren?</string>
+    <string name="squishy_leeren_ok">Leeren</string>
+    <plurals name="squishy_leeren_frage">
+        <item quantity="one">%1$d Titel wird endgültig aus dem Papierkorb entfernt und lässt sich nicht mehr zurücklegen. Die Bewertung bleibt erhalten.</item>
+        <item quantity="other">%1$d Titel werden endgültig aus dem Papierkorb entfernt und lassen sich nicht mehr zurücklegen. Die Bewertungen bleiben erhalten.</item>
+    </plurals>
     <string name="squishy_papierkorb_beschreibung">Abgelehnte Titel aus allen Playlists, neueste oben. Nach rechts wischen oder „Bewertung zurücknehmen“ legt einen Titel zurück, „Passt hierher“ nimmt ihn in die Playlist auf.</string>
     <string name="squishy_daumen_runter">Daumen runter (lang drücken: mehr)</string>
     <string name="squishy_pl_ja">Playlist gefällt mir</string>

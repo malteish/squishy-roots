@@ -103,6 +103,19 @@ object PlaylistFiles {
         return true
     }
 
+    /**
+     * Leert die Liste [name]: Alle Einträge fallen weg, Kopfzeilen (`#EXTM3U`, `#DESCRIPTION:`)
+     * bleiben. Gibt die Zahl der entfernten Einträge zurück.
+     */
+    fun clear(resolver: ContentResolver, tree: Uri, name: String): Int {
+        val doc = read(resolver, tree, name) ?: return 0
+        val head = doc.blocks.filter { it.track == null && it.lines.none { l -> l.startsWith("#EXTINF") ||
+                l.startsWith(ORIGIN_PREFIX) || l.isBlank() } }
+        val removed = doc.blocks.count { it.track != null }
+        if (removed > 0) write(resolver, doc, head)
+        return removed
+    }
+
     /** Herkunft aller Einträge des Papierkorbs [file], neueste zuerst: Pfadzeile → Listen. */
     fun trashOrigins(file: File): List<Pair<String, List<String>>> = runCatching {
         parse(file.readText()).mapNotNull { b ->

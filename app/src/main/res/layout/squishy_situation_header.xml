@@ -68,6 +68,13 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/squishy_leeren"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/squishy_leeren" />
+
     </LinearLayout>
 
 </LinearLayout>

@@ -440,6 +440,44 @@ object Feedback {
         }
     }
 
+    /**
+     * Leert den Papierkorb nach Rückfrage. Nur von Hand, nie automatisch (Maria verliert nicht
+     * gern etwas). Die Bewertungen bleiben, im Log steht ein Ereignis `ziel: papierkorb`.
+     */
+    fun askEmptyTrash(activity: MainActivity, anchor: View, trash: Playlist) {
+        val count = trash.songList.size
+        if (count == 0) return
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.squishy_leeren_titel)
+            .setMessage(activity.resources.getQuantityString(R.plurals.squishy_leeren_frage, count, count))
+            .setPositiveButton(R.string.squishy_leeren_ok) { _, _ ->
+                flushPending()
+                val file = trash.path ?: return@setPositiveButton
+                submit(activity, null, "", null, {}, {
+                    JSONObject().apply {
+                        put("zeit", now())
+                        put("person", prefs!!.getString(KEY_PERSON, null))
+                        put("ziel", "papierkorb")
+                        put("art", "leeren")
+                        put("liste", trash.title)
+                        put("anzahl", count)
+                        put("quelle", "kopf")
+                        put("app", BuildConfig.VERSION_NAME)
+                    }
+                }, {
+                    fileLock.withLock {
+                        val tree = Uri.parse(prefs!!.getString(KEY_TREE, null)!!)
+                        if (PlaylistFiles.clear(activity.contentResolver, tree, file.name) > 0) {
+                            loadTrash(activity, file)
+                            withContext(Dispatchers.Main) { refreshLater(activity) }
+                        }
+                    }
+                })
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     /** Immer nur eine Änderung an den M3U-Dateien zugleich (z. B. Zurücklegen in zwei Listen). */
     private val fileLock = Mutex()
 

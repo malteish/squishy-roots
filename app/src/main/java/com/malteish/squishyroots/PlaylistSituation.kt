@@ -99,7 +99,8 @@ object PlaylistSituation {
                     // Kommt der Kopf erst nach dem ersten Layout, bliebe er oberhalb des Sichtbaren.
                     val atTop = !recyclerView.canScrollVertically(-1)
                     header.update(description, candidates,
-                        title?.takeUnless { trash || Feedback.isSubList(it) })
+                        title?.takeUnless { trash || Feedback.isSubList(it) },
+                        pl?.takeIf { trash && title == Feedback.trashTitle() })
                     if (atTop) recyclerView.scrollToPosition(0)
                 }
         }
@@ -129,6 +130,9 @@ object PlaylistSituation {
         private var description: String? = null
         private var candidates: Playlist? = null
 
+        /** Der eigene Papierkorb, wenn er angezeigt wird (für „Papierkorb leeren …“). */
+        private var trash: Playlist? = null
+
         /** Situation, die der Kopf als Ganzes bewertet. null in der Vorschlagsliste. */
         private var situation: String? = null
 
@@ -136,6 +140,7 @@ object PlaylistSituation {
             val description: TextView = view.findViewById(R.id.squishy_beschreibung)
             val row: View = view.findViewById(R.id.squishy_kopf_zeile)
             val browse: MaterialButton = view.findViewById(R.id.squishy_stoebern)
+            val empty: MaterialButton = view.findViewById(R.id.squishy_leeren)
             val thumbUp: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_up)
             val thumbDown: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_down)
         }
@@ -144,10 +149,11 @@ object PlaylistSituation {
             if (itemCount == 1) notifyItemChanged(0)
         }
 
-        fun update(description: String?, candidates: Playlist?, situation: String?) {
+        fun update(description: String?, candidates: Playlist?, situation: String?, trash: Playlist?) {
             val wasShown = itemCount == 1
             this.description = description
             this.candidates = candidates
+            this.trash = trash
             this.situation = situation
             val shown = itemCount == 1
             when {
@@ -158,7 +164,7 @@ object PlaylistSituation {
         }
 
         override fun getItemCount() =
-            if (description != null || candidates != null || situation != null) 1 else 0
+            if (description != null || candidates != null || situation != null || trash != null) 1 else 0
 
         override fun getItemViewType(position: Int) = R.layout.squishy_situation_header
 
@@ -171,7 +177,10 @@ object PlaylistSituation {
             holder.description.text = description
             val c = candidates
             val sit = situation
-            holder.row.isVisible = c != null || sit != null
+            val t = trash?.takeIf { it.songList.isNotEmpty() }
+            holder.row.isVisible = c != null || sit != null || t != null
+            holder.empty.isVisible = t != null
+            if (t != null) holder.empty.setOnClickListener { Feedback.askEmptyTrash(activity, it, t) }
             holder.thumbUp.isVisible = sit != null
             holder.thumbDown.isVisible = sit != null
             if (sit != null) {
