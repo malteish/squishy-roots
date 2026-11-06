@@ -25,10 +25,16 @@ object Burst {
     private const val DURATION_MS = 700L
     private const val RISE_DP = 110f
 
-    /** [area] in Koordinaten von [anchor]. Ohne [area] gilt die ganze Ansicht. */
-    fun play(activity: Activity, anchor: View, up: Boolean, strength: Int, area: Rect? = null) {
+    /**
+     * [area] in Koordinaten von [anchor]. Ohne [area] gilt die ganze Ansicht. [iconRes] ersetzt
+     * den Daumen (z. B. beim Zurücklegen aus dem Papierkorb).
+     */
+    fun play(
+        activity: Activity, anchor: View, up: Boolean, strength: Int, area: Rect? = null,
+        iconRes: Int? = null
+    ) {
         val root = activity.window.decorView as ViewGroup
-        val icon = AppCompatResources.getDrawable(activity, if (up)
+        val icon = AppCompatResources.getDrawable(activity, iconRes ?: if (up)
             R.drawable.ic_squishy_thumb_up_filled else R.drawable.ic_squishy_thumb_down_filled)
             ?.mutate() ?: return
         icon.setTint(MaterialColors.getColor(anchor, if (up)

@@ -19,7 +19,10 @@
     <string name="squishy_fehler">Feedback nicht gespeichert: %1$s</string>
     <string name="squishy_daumen_hoch">Daumen hoch (lang drücken: mehr)</string>
     <string name="squishy_stoebern">Stöbern: %1$d Vorschläge</string>
-    <string name="squishy_abgelehnt">Abgelehnt: %1$d</string>
+    <string name="squishy_rueck_papierkorb">↶ Im Papierkorb · tippen: Rückgängig</string>
+    <string name="squishy_rueck_uebernommen">↶ In die Playlist übernommen · tippen: Rückgängig</string>
+    <string name="squishy_rueck_zurueckgelegt">↶ Zurückgelegt · tippen: Rückgängig</string>
+    <string name="squishy_papierkorb_beschreibung">Abgelehnte Titel aus allen Playlists, neueste oben. Nach rechts wischen oder „Bewertung zurücknehmen“ legt einen Titel zurück, „Passt hierher“ nimmt ihn in die Playlist auf.</string>
     <string name="squishy_daumen_runter">Daumen runter (lang drücken: mehr)</string>
     <string name="squishy_pl_ja">Playlist gefällt mir</string>
     <string name="squishy_pl_nein">Playlist gefällt mir nicht</string>

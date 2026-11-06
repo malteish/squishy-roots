@@ -231,6 +231,9 @@ class SongAdapter(
     }
 
     override fun onClick(item: MediaItem, position: Int) {
+        // Squishy Roots: Tipp auf eine Rückgängig-Zeile macht die Bewertung rückgängig.
+        if (com.malteish.squishyroots.Feedback.undo(mainActivity, squishyRowView(item),
+                squishyListTitle, item)) return
         if (isSubFragment == R.id.songs) {
             (context as SongPickerActivity).onSelected(item)
             return
@@ -384,8 +387,9 @@ class SongAdapter(
             }
         } else {
             super.onBindViewHolder(holder, position, payloads)
-            com.malteish.squishyroots.PlaylistSituation.decorate(
-                holder.subTitle, squishySituation, getSongList()[position].mediaId)
+            com.malteish.squishyroots.PlaylistSituation.decorate(holder.itemView, holder.songCover,
+                holder.title, holder.subTitle, squishySituation, squishyListTitle,
+                getSongList()[position])
             if (currentMediaItem == null || getSongList()[position].mediaId != currentMediaItem)
                 return
         }

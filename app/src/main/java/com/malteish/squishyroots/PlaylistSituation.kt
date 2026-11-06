@@ -23,6 +23,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.MediaItem
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -39,21 +40,27 @@ import org.akanework.gramophone.ui.fragments.GeneralSubFragment
 import uk.akane.libphonograph.items.Playlist
 
 /**
- * Eine Playlist `x` ist eine Situation. Ihre Vorschläge liegen in `x-kandidaten`, abgelehnte Titel
- * in `x-abgelehnt`. Beide sind in der Übersicht ausgeblendet, solange es `x` gibt. Erreichbar sind
- * sie über „Stöbern“ und „Abgelehnt“ im Kopf von `x`.
+ * Eine Playlist `x` ist eine Situation. Ihre Vorschläge liegen in `x-kandidaten` und sind in der
+ * Übersicht ausgeblendet, solange es `x` gibt. Erreichbar sind sie über „Stöbern“ im Kopf von `x`.
+ * Abgelehnte Titel aller Playlists liegen im Papierkorb `<person>-abgelehnt`, der als eine Playlist
+ * in der Übersicht steht. Dort zeigt jede Zeile, woher der Titel kam.
  */
 object PlaylistSituation {
 
     /** Adapter, deren Zeilen im Gitter die volle Breite einnehmen (CustomGridLayoutManager). */
     interface FullSpan
 
-    /** Für die Playlist-Übersicht: Vorschläge und Abgelehnte ausblenden, deren Situation existiert. */
+    /**
+     * Für die Playlist-Übersicht: Vorschläge ausblenden, deren Situation existiert, und die
+     * Papierkörbe anderer Personen.
+     */
     fun hideSubLists(playlists: List<Playlist>): List<Playlist> {
         val titles = playlists.mapNotNull { it.title }.toSet()
+        val ownTrash = Feedback.trashTitle()
         return playlists.filter { pl ->
             val t = pl.title
-            !Feedback.isSubList(t) || Feedback.situationOf(t) !in titles
+            (!Feedback.isSubList(t) || Feedback.situationOf(t) !in titles) &&
+                    (!Feedback.isTrash(t) || t == ownTrash)
         }
     }
 
@@ -71,12 +78,16 @@ object PlaylistSituation {
                     val title = pl?.title?.takeIf { pl.javaClass == Playlist::class.java }
                     listTitle = title
                     songAdapter.squishyListTitle = title
-                    val situation = Feedback.situationOf(title)
+                    val trash = Feedback.isTrash(title)
+                    // Im Papierkorb hat jeder Titel die Situation seiner Herkunft.
+                    val situation = if (trash) null else Feedback.situationOf(title)
                     val parent = all.firstOrNull { it.title == situation }
-                    val candidates = if (title == null || Feedback.isSubList(title)) null
+                    val candidates = if (title == null || trash || Feedback.isSubList(title)) null
                     else all.firstOrNull { it.title == title + Feedback.CANDIDATE_SUFFIX }
-                    val rejected = if (title == null || Feedback.isSubList(title)) null
-                    else all.firstOrNull { it.title == title + Feedback.REJECTED_SUFFIX }
+                    if (trash) {
+                        Feedback.loadTrash(activity, pl?.path)
+                        songAdapter.notifyItemRangeChanged(0, songAdapter.itemCount)
+                    }
                     val description = withContext(Dispatchers.IO) {
                         pl?.path?.let { Feedback.readDescription(it) }
                             ?: parent?.path?.let { Feedback.readDescription(it) }
@@ -87,8 +98,8 @@ object PlaylistSituation {
                     }
                     // Kommt der Kopf erst nach dem ersten Layout, bliebe er oberhalb des Sichtbaren.
                     val atTop = !recyclerView.canScrollVertically(-1)
-                    header.update(description, candidates, rejected,
-                        title?.takeUnless { Feedback.isSubList(it) })
+                    header.update(description, candidates,
+                        title?.takeUnless { trash || Feedback.isSubList(it) })
                     if (atTop) recyclerView.scrollToPosition(0)
                 }
         }
@@ -104,6 +115,9 @@ object PlaylistSituation {
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         fragment.viewLifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            // Wer die Liste verlässt, hat sich entschieden: Wartendes sofort ausführen.
+            override fun onStop(owner: LifecycleOwner) = Feedback.flushPending()
+
             override fun onDestroy(owner: LifecycleOwner) {
                 prefs.unregisterOnSharedPreferenceChangeListener(listener)
             }
@@ -114,7 +128,6 @@ object PlaylistSituation {
         RecyclerView.Adapter<HeaderAdapter.Holder>(), FullSpan {
         private var description: String? = null
         private var candidates: Playlist? = null
-        private var rejected: Playlist? = null
 
         /** Situation, die der Kopf als Ganzes bewertet. null in der Vorschlagsliste. */
         private var situation: String? = null
@@ -123,7 +136,6 @@ object PlaylistSituation {
             val description: TextView = view.findViewById(R.id.squishy_beschreibung)
             val row: View = view.findViewById(R.id.squishy_kopf_zeile)
             val browse: MaterialButton = view.findViewById(R.id.squishy_stoebern)
-            val rejected: MaterialButton = view.findViewById(R.id.squishy_abgelehnt)
             val thumbUp: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_up)
             val thumbDown: MaterialButton = view.findViewById(R.id.squishy_pl_thumb_down)
         }
@@ -132,11 +144,10 @@ object PlaylistSituation {
             if (itemCount == 1) notifyItemChanged(0)
         }
 
-        fun update(description: String?, candidates: Playlist?, rejected: Playlist?, situation: String?) {
+        fun update(description: String?, candidates: Playlist?, situation: String?) {
             val wasShown = itemCount == 1
             this.description = description
             this.candidates = candidates
-            this.rejected = rejected
             this.situation = situation
             val shown = itemCount == 1
             when {
@@ -147,7 +158,7 @@ object PlaylistSituation {
         }
 
         override fun getItemCount() =
-            if (description != null || candidates != null || rejected != null || situation != null) 1 else 0
+            if (description != null || candidates != null || situation != null) 1 else 0
 
         override fun getItemViewType(position: Int) = R.layout.squishy_situation_header
 
@@ -160,7 +171,6 @@ object PlaylistSituation {
             holder.description.text = description
             val c = candidates
             val sit = situation
-            val r = rejected
             holder.row.isVisible = c != null || sit != null
             holder.thumbUp.isVisible = sit != null
             holder.thumbDown.isVisible = sit != null
@@ -183,11 +193,6 @@ object PlaylistSituation {
                 holder.browse.text = activity.getString(R.string.squishy_stoebern, c.songList.size)
                 holder.browse.setOnClickListener { open(c) }
             }
-            holder.rejected.isVisible = r != null && r.songList.isNotEmpty()
-            if (r != null) {
-                holder.rejected.text = activity.getString(R.string.squishy_abgelehnt, r.songList.size)
-                holder.rejected.setOnClickListener { open(r) }
-            }
         }
 
         private fun open(list: Playlist) {
@@ -200,7 +205,8 @@ object PlaylistSituation {
     }
 
     /**
-     * Nach rechts: passt hierher. Nach links: passt nicht hierher. Die Zeile wird nie ganz
+     * Nach rechts: passt hierher. Nach links: passt nicht hierher. Im Papierkorb nur nach rechts:
+     * zurücklegen. Die Zeile wird nie ganz
      * weggewischt, sondern federt zurück. Ausgelöst wird beim Loslassen, wenn sie weit genug
      * gezogen war.
      */
@@ -210,11 +216,15 @@ object PlaylistSituation {
         private val paint = Paint()
         private val up = AppCompatResources.getDrawable(activity, R.drawable.ic_squishy_thumb_up_filled)!!
         private val down = AppCompatResources.getDrawable(activity, R.drawable.ic_squishy_thumb_down_filled)!!
+        private val restore = AppCompatResources.getDrawable(activity, R.drawable.ic_squishy_restore)!!
         private var lastDx = 0f
 
         override fun getSwipeDirs(rv: RecyclerView, holder: RecyclerView.ViewHolder): Int =
-            if (holder.bindingAdapter === songAdapter && listTitle() != null)
-                super.getSwipeDirs(rv, holder) else 0
+            if (holder.bindingAdapter !== songAdapter || listTitle() == null) 0
+            else if (songAdapter.getSongList().getOrNull(holder.bindingAdapterPosition)
+                    ?.let { Feedback.pendingLabel(listTitle(), it.mediaId) } != null) 0
+            else if (Feedback.isTrash(listTitle())) ItemTouchHelper.RIGHT
+            else super.getSwipeDirs(rv, holder)
 
         override fun onMove(
             rv: RecyclerView, holder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder
@@ -255,7 +265,7 @@ object PlaylistSituation {
                 paint.color = MaterialColors.getColor(v, if (right)
                     com.google.android.material.R.attr.colorPrimaryContainer
                 else com.google.android.material.R.attr.colorErrorContainer)
-                val icon = if (right) up else down
+                val icon = if (!right) down else if (Feedback.isTrash(listTitle())) restore else up
                 icon.setTint(MaterialColors.getColor(v, if (right)
                     com.google.android.material.R.attr.colorOnPrimaryContainer
                 else com.google.android.material.R.attr.colorOnErrorContainer))
@@ -278,16 +288,47 @@ object PlaylistSituation {
     /** Anteil der Zeilenbreite, ab dem Wischen auslöst. */
     private const val TRIGGER = 0.3f
 
-    /** Markierung bewerteter Titel in Listen einer Situation: je stärker, desto größer. */
-    fun decorate(subtitle: TextView, situation: String?, mediaId: String) {
-        if (situation == null) return
-        val score = Feedback.score(situation, mediaId)
-        if (score == 0) return
-        val mark = SpannableString(if (score > 0) "👍" else "👎")
-        mark.setSpan(RelativeSizeSpan(LIST_SCALE[kotlin.math.abs(score) - 1]), 0, mark.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        subtitle.text = SpannableStringBuilder(mark).append(" ").append(subtitle.text)
+    /**
+     * Markierung bewerteter Titel in Listen einer Situation: je stärker, desto größer. Im
+     * Papierkorb [listTitle] gilt die Situation der Herkunft, und die Zeile nennt die Herkunft.
+     * Wartet eine Änderung, die den Titel aus der Liste nimmt, zeigt die Zeile stattdessen an
+     * ihrem Platz, was geschieht, und „Rückgängig“ (Tipp auf die Zeile).
+     */
+    fun decorate(
+        row: View, cover: View, title: TextView, subtitle: TextView, situation: String?,
+        listTitle: String?, item: MediaItem
+    ) {
+        // Zeilen werden wiederverwendet: ursprüngliche Farbe merken und jedes Mal zurücksetzen.
+        val color = (subtitle.getTag(R.id.squishy_rueckgaengig_farbe) as? Int)
+            ?: subtitle.currentTextColor.also { subtitle.setTag(R.id.squishy_rueckgaengig_farbe, it) }
+        subtitle.setTextColor(color)
+        cover.alpha = 1f
+        title.alpha = 1f
+        val label = Feedback.pendingLabel(listTitle, item.mediaId)
+        if (label != null) {
+            cover.alpha = PENDING_ALPHA
+            title.alpha = PENDING_ALPHA
+            subtitle.setTextColor(MaterialColors.getColor(row, androidx.appcompat.R.attr.colorPrimary))
+            subtitle.text = row.context.getString(label)
+            return
+        }
+        val origins = if (Feedback.isTrash(listTitle)) Feedback.trashOrigins(item) else emptyList()
+        val sit = if (Feedback.isTrash(listTitle)) Feedback.situationOf(origins.firstOrNull())
+        else situation
+        val text = SpannableStringBuilder(subtitle.text)
+        if (origins.isNotEmpty())
+            text.append(" · aus ").append(origins.joinToString(", ") { Feedback.originLabel(it) })
+        val score = if (sit == null) 0 else Feedback.score(sit, item.mediaId)
+        if (score != 0) {
+            val mark = SpannableString(if (score > 0) "👍" else "👎")
+            mark.setSpan(RelativeSizeSpan(LIST_SCALE[kotlin.math.abs(score) - 1]), 0, mark.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.insert(0, " ").insert(0, mark)
+        }
+        if (score != 0 || origins.isNotEmpty()) subtitle.text = text
     }
+
+    private const val PENDING_ALPHA = 0.4f
 
     /** Schriftgröße der Markierung relativ zum Untertitel, für Stärke 1 bis 3. */
     private val LIST_SCALE = floatArrayOf(0.75f, 1.1f, 1.45f)
