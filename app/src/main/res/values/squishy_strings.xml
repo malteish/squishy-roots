@@ -16,6 +16,10 @@
     <string name="squishy_person">Wer hört? (z. B. malte)</string>
     <string name="squishy_ordner">Ordner für Feedback</string>
     <string name="squishy_ordner_hinweis">Bitte den Musikordner wählen, den Syncthing synchronisiert. Das Feedback landet dort unter feedback/.</string>
+    <string name="squishy_ordner_alle_dateien">Hier gibt es keinen Ordner-Dialog, etwa in einem eingeschränkten Profil. Squishy braucht dann „Zugriff auf alle Dateien“, um Playlists und Feedback im Musikordner zu ändern. Danach den Ordner wählen, den Syncthing synchronisiert.</string>
+    <string name="squishy_ordner_unmoeglich">Hier lässt sich kein Ordner freigeben. Es braucht mindestens eine Playlist im Musikordner.</string>
+    <string name="squishy_ordner_waehlen">Musikordner wählen</string>
+    <string name="squishy_ordner_einstellungen">Einstellungen öffnen</string>
     <string name="squishy_fehler">Feedback nicht gespeichert: %1$s</string>
     <string name="squishy_daumen_hoch">Daumen hoch (lang drücken: mehr)</string>
     <string name="squishy_stoebern">Stöbern: %1$d Vorschläge</string>

@@ -34,6 +34,10 @@
         android:maxSdkVersion="29"
         tools:ignore="ScopedStorage" />
     <!-- Run music playback service -->
+    <!-- Squishy: Playlists und Feedback ohne Ordner-Dialog (eingeschränkte Android-Profile) -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"
 	    tools:ignore="ForegroundServicesPolicy" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"

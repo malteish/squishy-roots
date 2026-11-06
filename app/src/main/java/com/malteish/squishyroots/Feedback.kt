@@ -6,13 +6,15 @@
 
 package com.malteish.squishyroots
 
-import android.content.ContentResolver
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.media.MediaScannerConnection
 import android.net.Uri
-import android.provider.DocumentsContract
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import android.text.InputType
 import android.view.View
 import android.widget.EditText
@@ -68,6 +70,7 @@ object Feedback {
 
     private const val KEY_PERSON = "squishy_person"
     private const val KEY_TREE = "squishy_tree"
+    private const val KEY_DIR = "squishy_dir"
     private const val KEY_QUEUE = "squishy_queue"
     private const val DESCRIPTION_PREFIX = "#DESCRIPTION:"
     const val CANDIDATE_SUFFIX = "-kandidaten"
@@ -127,6 +130,8 @@ object Feedback {
     private var prefs: SharedPreferences? = null
     private var queueTitle: String? = null
     private var picker: ActivityResultLauncher<Uri?>? = null
+    private var allFiles: ActivityResultLauncher<Intent>? = null
+    private var afterAllFiles: (() -> Unit)? = null
     private var afterPick: (() -> Unit)? = null
 
     /** Aus [MainActivity.onCreate] aufrufen, bevor die Activity startet. */
@@ -138,10 +143,14 @@ object Feedback {
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-                prefs!!.edit { putString(KEY_TREE, uri.toString()) }
+                prefs!!.edit { putString(KEY_TREE, uri.toString()); remove(KEY_DIR) }
                 afterPick?.invoke()
             }
             afterPick = null
+        }
+        allFiles = activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            if (hasAllFiles()) afterAllFiles?.invoke()
+            afterAllFiles = null
         }
     }
 
@@ -426,7 +435,7 @@ object Feedback {
             activity.lifecycleScope.launch {
                 val error = withContext(Dispatchers.IO) {
                     runCatching {
-                        append(activity.contentResolver, build())
+                        append(folder(activity), build())
                         afterLog()
                     }.exceptionOrNull()
                 }
@@ -466,8 +475,7 @@ object Feedback {
                     }
                 }, {
                     fileLock.withLock {
-                        val tree = Uri.parse(prefs!!.getString(KEY_TREE, null)!!)
-                        if (PlaylistFiles.clear(activity.contentResolver, tree, file.name) > 0) {
+                        if (PlaylistFiles.clear(folder(activity), file.name) > 0) {
                             loadTrash(activity, file)
                             withContext(Dispatchers.Main) { refreshLater(activity) }
                         }
@@ -508,8 +516,7 @@ object Feedback {
         val playlists = activity.reader.playlistListFlow.first()
             .filter { it.javaClass == Playlist::class.java }
         fun fileOf(title: String?) = playlists.firstOrNull { it.title == title }?.path
-        val resolver = activity.contentResolver
-        val tree = Uri.parse(prefs!!.getString(KEY_TREE, null)!!)
+        val folder = folder(activity)
         val takeBack = score == 0 && grund == ZURUECKGENOMMEN
         var created: File? = null
         val trashFile: File?
@@ -522,21 +529,21 @@ object Feedback {
                     score > 0 -> fileOf(situationOf(origin)) ?: fileOf(origin)
                     else -> null
                 } ?: return
-                if (!PlaylistFiles.restore(resolver, tree, trashFile.name, to.name,
+                if (!PlaylistFiles.restore(folder, trashFile.name, to.name,
                         trashFile.parent ?: "", itemPath, origin)) return
             }
             score < 0 && (grund == PASST_NICHT || grund == MAG_NICHT) -> {
                 val from = fileOf(listTitle) ?: return
                 trashFile = fileOf(trash) ?: File(from.parentFile, "$trash.${from.extension}")
                     .also { created = it }
-                if (!PlaylistFiles.moveToTrash(resolver, tree, from.name, trashFile.name,
+                if (!PlaylistFiles.moveToTrash(folder, from.name, trashFile.name,
                         from.parent ?: "", itemPath, listTitle,
                         activity.getString(R.string.squishy_papierkorb_beschreibung))) return
             }
             score > 0 && isSubList(listTitle) -> {
                 val from = fileOf(listTitle) ?: return
                 val to = fileOf(situationOf(listTitle)) ?: return
-                if (!PlaylistFiles.move(resolver, tree, from.name, to.name, from.parent ?: "",
+                if (!PlaylistFiles.move(folder, from.name, to.name, from.parent ?: "",
                         itemPath)) return
                 trashFile = null
             }
@@ -544,7 +551,7 @@ object Feedback {
                 // Im Player: Der Titel steht noch in der Warteschlange, aber schon im Papierkorb.
                 trashFile = fileOf(trash) ?: return
                 val to = fileOf(listTitle) ?: return
-                if (!PlaylistFiles.restore(resolver, tree, trashFile.name, to.name,
+                if (!PlaylistFiles.restore(folder, trashFile.name, to.name,
                         trashFile.parent ?: "", itemPath, listTitle)) return
             }
             else -> return
@@ -749,26 +756,18 @@ object Feedback {
         }
     }.getOrNull()
 
-    private fun append(resolver: ContentResolver, event: JSONObject) {
-        val tree = Uri.parse(prefs!!.getString(KEY_TREE, null)!!)
+    private fun append(folder: Folder, event: JSONObject) {
         val person = prefs!!.getString(KEY_PERSON, null)!!
-        val dir = findOrCreate(resolver, tree, DocumentsContract.getTreeDocumentId(tree),
-            "feedback", DocumentsContract.Document.MIME_TYPE_DIR)
-        val file = findOrCreate(resolver, tree, DocumentsContract.getDocumentId(dir),
-            "$person.jsonl", "application/octet-stream")
-        resolver.openOutputStream(file, "wa")!!.use {
-            it.write((event.toString() + "\n").toByteArray())
-        }
+        folder.appendFeedback("$person.jsonl", (event.toString() + "\n").toByteArray())
     }
 
-    private fun findOrCreate(
-        resolver: ContentResolver, tree: Uri, parentId: String, name: String, mime: String
-    ): Uri {
-        PlaylistFiles.find(resolver, tree, parentId, name)?.let { return it }
-        return DocumentsContract.createDocument(resolver,
-            DocumentsContract.buildDocumentUriUsingTree(tree, parentId), mime, name)
-            ?: throw IllegalStateException("$name konnte nicht angelegt werden")
-    }
+    /** Der freigegebene Ordner: direkt über den Pfad, falls so eingerichtet, sonst über SAF. */
+    private fun folder(context: Context): Folder =
+        prefs!!.getString(KEY_DIR, null)?.let { Folder.Direct(File(it)) }
+            ?: Folder.Saf(context.contentResolver, Uri.parse(prefs!!.getString(KEY_TREE, null)!!))
+
+    private fun hasAllFiles() =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
 
     /** Fragt Person und Ordner ab, falls noch nicht eingerichtet (oder [force]). */
     private fun setup(activity: MainActivity, force: Boolean, then: () -> Unit) {
@@ -779,13 +778,14 @@ object Feedback {
                 it.uri.toString() == tree && it.isWritePermission
             }
         } == true
+        val dirOk = p.getString(KEY_DIR, null)?.let { hasAllFiles() && File(it).isDirectory } == true
         when {
             force || p.getString(KEY_PERSON, null) == null ->
                 askText(activity, R.string.squishy_person, p.getString(KEY_PERSON, null)) { name ->
                     p.edit { putString(KEY_PERSON, name.trim().lowercase()) }
                     if (force) pickTree(activity, then) else setup(activity, false, then)
                 }
-            !treeOk -> pickTree(activity, then)
+            !treeOk && !dirOk -> pickTree(activity, then)
             else -> then()
         }
     }
@@ -796,10 +796,81 @@ object Feedback {
             .setMessage(R.string.squishy_ordner_hinweis)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 afterPick = then
-                picker!!.launch(null)
+                try {
+                    picker!!.launch(null)
+                } catch (e: ActivityNotFoundException) {
+                    // Kein Ordner-Dialog, z. B. in einem eingeschränkten Android-Profil.
+                    afterPick = null
+                    pickDirect(activity, then)
+                }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    /**
+     * Ausweg ohne Ordner-Dialog: „Zugriff auf alle Dateien“ erbitten (die M3U gehören Syncthing),
+     * dann den Ordner aus den Ordnern der Playlists wählen, die eigenen `<person>-…` zuerst.
+     */
+    private fun pickDirect(activity: MainActivity, then: () -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            impossible(activity)
+            return
+        }
+        if (hasAllFiles()) {
+            chooseDir(activity, then)
+            return
+        }
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.squishy_ordner)
+            .setMessage(R.string.squishy_ordner_alle_dateien)
+            .setPositiveButton(R.string.squishy_ordner_einstellungen) { _, _ ->
+                afterAllFiles = { chooseDir(activity, then) }
+                val app = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.fromParts("package", activity.packageName, null))
+                try {
+                    allFiles!!.launch(app)
+                } catch (_: ActivityNotFoundException) {
+                    try {
+                        allFiles!!.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                    } catch (_: ActivityNotFoundException) {
+                        afterAllFiles = null
+                        impossible(activity)
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun impossible(activity: MainActivity) {
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.squishy_ordner)
+            .setMessage(R.string.squishy_ordner_unmoeglich)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    /** Wie die Blacklist-Einstellung: Auswahl aus den Ordnern, die die Mediathek kennt. */
+    private fun chooseDir(activity: MainActivity, then: () -> Unit) {
+        activity.lifecycleScope.launch {
+            val person = prefs!!.getString(KEY_PERSON, null)
+            val dirs = activity.reader.playlistListFlow.first().mapNotNull { it.path }
+                .sortedBy { if (person != null && it.name.startsWith("$person-")) 0 else 1 }
+                .mapNotNull { it.parent }.distinct()
+            if (dirs.isEmpty()) {
+                impossible(activity)
+                return@launch
+            }
+            MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.squishy_ordner_waehlen)
+                .setItems(dirs.toTypedArray()) { _, which ->
+                    prefs!!.edit { putString(KEY_DIR, dirs[which]) }
+                    then()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
     }
 
     private fun askText(activity: MainActivity, title: Int, preset: String?, onOk: (String) -> Unit) {
