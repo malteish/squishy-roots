@@ -53,6 +53,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import okio.Buffer
+import okio.Path.Companion.toOkioPath
 import okio.buffer
 import okio.source
 import org.akanework.gramophone.logic.GramophoneAlbumArtProvider
@@ -122,6 +123,7 @@ object CoilArtPipeline {
             return Fetcher {
                 val songFile = data.songFile ?: getFileFor(options.context,
                     data.songUri)
+                directCover(songFile, options)?.let { return@Fetcher it }
                 val imgUri = if (!Flags.MEDIASTORE_IO) {
                     val imgFile = MiscUtils.findBestCover(songFile.parentFile!!)
                         ?: return@Fetcher continueFetchingOrFail(
@@ -190,6 +192,22 @@ object CoilArtPipeline {
         }
     }
 
+    /**
+     * Squishy: read the cover file next to the song directly. With "all files access" this works
+     * without the MediaStore image index, which on the Samsung tablet (Android 13) doesn't find
+     * cover.jpg in the music folders. Returns null if the folder can't be listed or has no cover.
+     */
+    private fun directCover(songFile: File?, options: Options): SourceFetchResult? {
+        val parent = songFile?.parentFile ?: return null
+        val img = MiscUtils.findBestCover(parent) ?: return null
+        if (!img.canRead()) return null
+        return SourceFetchResult(
+            source = ImageSource(img.toOkioPath(), options.fileSystem),
+            mimeType = null,
+            dataSource = DataSource.DISK,
+        )
+    }
+
     private suspend fun continueFetchingOrFail(data: Any, options: Options,
                                                imageLoader: ImageLoader): FetchResult {
         val fetchResult: FetchResult
@@ -231,7 +249,7 @@ object CoilArtPipeline {
                     LoadAudioCoverData(data.pathSegments[1].toLong(),
                         // Security: query parameters are removed before album art provider uses Uri
                         data.toAndroidUri().getQueryParameter("songFile")
-                            ?.let { File(it) }))
+                            ?.let { File(it) }, systemTried = true))
             } else null
         }
     }
@@ -291,7 +309,11 @@ object CoilArtPipeline {
         }
     }
 
-    data class LoadAudioCoverData(val id: Long, val songFile: File?)
+    /**
+     * @param systemTried Squishy: the system thumbnail already failed, don't ask it again.
+     */
+    data class LoadAudioCoverData(val id: Long, val songFile: File?,
+                                  val systemTried: Boolean = false)
 
     class AudioCoverKeyer : Keyer<LoadAudioCoverData> {
         override fun key(data: LoadAudioCoverData, options: Options): String {
@@ -354,15 +376,31 @@ object CoilArtPipeline {
                         }
                     }
                 }
-                if (hasScopedStorageWithMediaTypes() && (Flags.REMOVE_IMAGE_PERMISSION ||
-                            !options.context.hasImagePermission())) {
-                    return@Fetcher continueFetchingOrFail(LoadThumbnailData(uri),
-                        options, imageLoader)
-                }
                 // We shouldn't trust the uri wrt path of song, otherwise this provider could be
                 // misused to get image files from any folder. So do a query here
                 // (Note: data.songFile is only set for trusted data!)
-                val file = data.songFile ?: getFileFor(options.context, uri)
+                val file = try {
+                    data.songFile ?: getFileFor(options.context, uri)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: IOException) {
+                    null
+                }
+                // Squishy: cover.jpg next to the song, read directly (all files access)
+                directCover(file, options)?.let { return@Fetcher it }
+                // Squishy: whatever the own lookup misses, the system thumbnail gets the last word
+                // (v0.9.2 lost covers when the image permission was granted and the MediaStore
+                // image query came back empty).
+                val systemThumbnail = suspend {
+                    if (data.systemTried) throw NoAlbumArtException("No album art found")
+                    continueFetchingOrFail(LoadThumbnailData(uri), options, imageLoader)
+                }
+                if (file == null || (hasScopedStorageWithMediaTypes() &&
+                            (Flags.REMOVE_IMAGE_PERMISSION ||
+                                    !options.context.hasImagePermission()))) {
+                    return@Fetcher systemThumbnail()
+                }
+                try {
                 // Only poke around for files on external storage
                 if (Environment.MEDIA_UNKNOWN ==
                     Environment.getExternalStorageState(file)) {
@@ -442,6 +480,11 @@ object CoilArtPipeline {
                 }
                 return@Fetcher continueFetchingOrFail(imgUri,
                     options, imageLoader)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return@Fetcher systemThumbnail()
+                }
             }
         }
     }

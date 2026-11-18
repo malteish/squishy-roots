@@ -20,8 +20,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -47,7 +50,8 @@ class ThumbnailFallbackTest {
         assertNotNull(data)
         assertEquals(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, 42),
             data!!.uri)
-        assertEquals(CoilArtPipeline.LoadAudioCoverData(42, songFile), data.fallback)
+        assertEquals(CoilArtPipeline.LoadAudioCoverData(42, songFile, systemTried = true),
+            data.fallback)
     }
 
     @Test
@@ -88,5 +92,24 @@ class ThumbnailFallbackTest {
             fail("expected an exception")
         } catch (_: Exception) {
         }
+    }
+
+    @get:Rule
+    val tmp = TemporaryFolder()
+
+    /** v0.9.2 regression: the MediaStore image index on the tablet doesn't know cover.jpg. */
+    @Test
+    fun albumCoverIsReadDirectlyFromTheFolder() = runBlocking {
+        val folder = tmp.newFolder("Nena")
+        val song = File(folder, "01 - 99 Luftballons.mp3").apply { writeBytes(ByteArray(1)) }
+        val cover = File(folder, "cover.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        File(folder, "back.jpg").writeBytes(byteArrayOf(9))
+        val data = CoilArtPipeline.AlbumThumbnailData(
+            ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, 42), song)
+        val result = CoilArtPipeline.AlbumThumbnailFetcherFactory()
+            .create(data, smallOptions, ImageLoader.Builder(context).build()).fetch()
+        assertTrue(result is SourceFetchResult)
+        assertEquals(cover.absolutePath,
+            (result as SourceFetchResult).source.file().toFile().absolutePath)
     }
 }
