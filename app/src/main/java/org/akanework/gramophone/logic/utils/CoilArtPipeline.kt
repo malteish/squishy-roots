@@ -212,7 +212,12 @@ object CoilArtPipeline {
         return fetchResult
     }
 
-    data class LoadThumbnailData(val uri: android.net.Uri)
+    /**
+     * @param fallback Squishy: if the system can't make a thumbnail for this song (Samsung,
+     * Android 13 ignores cover.jpg next to the audio file), look for the cover ourselves.
+     */
+    data class LoadThumbnailData(val uri: android.net.Uri,
+                                 val fallback: LoadAudioCoverData? = null)
 
     class ThumbnailMapper : Mapper<Uri, LoadThumbnailData> {
         override fun map(data: Uri, options: Options): LoadThumbnailData? {
@@ -222,7 +227,11 @@ object CoilArtPipeline {
                 isSmallSize(options.context, options.size)) {
                 LoadThumbnailData(ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    data.pathSegments[1].toLong()))
+                    data.pathSegments[1].toLong()),
+                    LoadAudioCoverData(data.pathSegments[1].toLong(),
+                        // Security: query parameters are removed before album art provider uses Uri
+                        data.toAndroidUri().getQueryParameter("songFile")
+                            ?.let { File(it) }))
             } else null
         }
     }
@@ -240,21 +249,14 @@ object CoilArtPipeline {
             imageLoader: ImageLoader
         ): Fetcher {
             return Fetcher {
-                val afd = MediaStoreCompat.openTypedAssetFileDescriptor(options.context,
-                    data.uri, "image/jpeg", Bundle().apply {
-                        val height = options.size.height.let {
-                            if (it is Dimension.Pixels) it.px else null
-                        }
-                        val width = options.size.width.let {
-                            if (it is Dimension.Pixels) it.px else null
-                        }
-                        // Size is REQUIRED to get an image!
-                        if (height != null && width != null)
-                            putParcelable(ContentResolver.EXTRA_SIZE, Point(width, height))
-                        else
-                            putParcelable(ContentResolver.EXTRA_SIZE, getSmallSize(options.context))
-                    })
-                checkNotNull(afd) { "Unable to open '${data.uri}' as thumbnail." }
+                val afd = try {
+                    openThumbnail(data, options)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (data.fallback == null) throw e
+                    return@Fetcher continueFetchingOrFail(data.fallback, options, imageLoader)
+                }
 
                 return@Fetcher SourceFetchResult(
                     source = ImageSource(
@@ -268,6 +270,24 @@ object CoilArtPipeline {
                     dataSource = DataSource.DISK,
                 )
             }
+        }
+
+        private fun openThumbnail(data: LoadThumbnailData, options: Options): AssetFileDescriptor {
+            val afd = MediaStoreCompat.openTypedAssetFileDescriptor(options.context,
+                data.uri, "image/jpeg", Bundle().apply {
+                    val height = options.size.height.let {
+                        if (it is Dimension.Pixels) it.px else null
+                    }
+                    val width = options.size.width.let {
+                        if (it is Dimension.Pixels) it.px else null
+                    }
+                    // Size is REQUIRED to get an image!
+                    if (height != null && width != null)
+                        putParcelable(ContentResolver.EXTRA_SIZE, Point(width, height))
+                    else
+                        putParcelable(ContentResolver.EXTRA_SIZE, getSmallSize(options.context))
+                })
+            return checkNotNull(afd) { "Unable to open '${data.uri}' as thumbnail." }
         }
     }
 
